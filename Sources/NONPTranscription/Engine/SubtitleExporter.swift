@@ -24,14 +24,23 @@ enum SubtitleExportError: LocalizedError {
 }
 
 enum SubtitleExporter {
-    /// Écrit `<source>.srt` et `<source>.txt` dans le dossier du fichier source.
+    /// Écrit `<source>.srt` et `<source>.txt`.
+    /// Par défaut dans le dossier du fichier source ; si `outputDirectory` est
+    /// fourni, les fichiers y sont écrits (le nom reste celui de la source).
     /// Renvoie les URL des deux fichiers créés.
     @discardableResult
-    static func export(segments: [TranscriptSegment], sourceURL: URL) throws
+    static func export(segments: [TranscriptSegment], sourceURL: URL,
+                       outputDirectory: URL? = nil) throws
         -> (srt: URL, txt: URL) {
 
-        let directory = sourceURL.deletingLastPathComponent()
-        let baseName = sourceURL.deletingPathExtension().lastPathComponent
+        // Dossier cible : personnalisé si fourni, sinon celui de la vidéo.
+        let directory = outputDirectory ?? sourceURL.deletingLastPathComponent()
+        let originalBase = sourceURL.deletingPathExtension().lastPathComponent
+
+        // Gestion des collisions : on ne réutilise un nom que si NI le .srt NI le
+        // .txt n'existent déjà. Sinon on incrémente un suffixe (_2, _3, …). Le
+        // même suffixe est appliqué aux deux fichiers pour qu'ils restent appariés.
+        let baseName = availableBaseName(in: directory, base: originalBase)
         let srtURL = directory.appendingPathComponent(baseName + ".srt")
         let txtURL = directory.appendingPathComponent(baseName + ".txt")
 
@@ -47,6 +56,24 @@ enum SubtitleExporter {
         }
 
         return (srtURL, txtURL)
+    }
+
+    /// Cherche un nom de base disponible dans `directory` : d'abord `base`, puis
+    /// `base_2`, `base_3`, … Un nom est considéré libre seulement si NI `.srt` NI
+    /// `.txt` n'existent (les deux extensions sont vérifiées ensemble, afin que le
+    /// SRT et le TXT partagent toujours le même suffixe).
+    static func availableBaseName(in directory: URL, base: String) -> String {
+        let fm = FileManager.default
+        func taken(_ name: String) -> Bool {
+            let srt = directory.appendingPathComponent(name + ".srt")
+            let txt = directory.appendingPathComponent(name + ".txt")
+            return fm.fileExists(atPath: srt.path) || fm.fileExists(atPath: txt.path)
+        }
+
+        if !taken(base) { return base }
+        var n = 2
+        while taken("\(base)_\(n)") { n += 1 }
+        return "\(base)_\(n)"
     }
 
     // MARK: - Génération des contenus

@@ -22,13 +22,70 @@ enum SelfTest {
             let path = args[i + 1]
             let lang: TranscriptionLanguage = args.contains("--lang-en") ? .english : .auto
             let reveal = args.contains("--reveal")
-            runBlocking { await runPipeline(inputPath: path, language: lang, reveal: reveal) }
+            // Dossier de sortie personnalisé optionnel (--out <dossier>).
+            var outDir: URL? = nil
+            if let j = args.firstIndex(of: "--out"), j + 1 < args.count {
+                outDir = URL(fileURLWithPath: args[j + 1], isDirectory: true)
+            }
+            runBlocking {
+                await runPipeline(inputPath: path, language: lang,
+                                  reveal: reveal, outputDirectory: outDir)
+            }
         }
 
         if let i = args.firstIndex(of: "--selftest-cancel"), i + 1 < args.count {
             let path = args[i + 1]
             runBlocking { await runCancelTest(inputPath: path) }
         }
+
+        // Persistance des réglages : écriture (process 1) puis lecture (process 2).
+        if let i = args.firstIndex(of: "--prefs-write"), i + 1 < args.count {
+            let path = args[i + 1]
+            runBlocking { await prefsWrite(path) }
+        }
+        if args.contains("--prefs-read") {
+            runBlocking { await prefsRead() }
+        }
+        // Résolution du dossier de sortie effectif (teste le repli si dossier absent).
+        if let i = args.firstIndex(of: "--resolve-out"), i + 1 < args.count {
+            let src = args[i + 1]
+            runBlocking { await resolveOut(src) }
+        }
+    }
+
+    /// Affiche le dossier de sortie EFFECTIF résolu par les réglages pour une source.
+    private static func resolveOut(_ sourcePath: String) async -> Int32 {
+        await MainActor.run {
+            let p = Preferences()
+            let dir = p.outputDirectory(for: URL(fileURLWithPath: sourcePath))
+            print("[selftest] mode=\(p.outputMode.rawValue) "
+                + "customUsable=\(p.customFolderIsUsable) → sortie=\(dir.path)")
+        }
+        return 0
+    }
+
+    // MARK: - Test de persistance des réglages
+
+    private static func prefsWrite(_ path: String) async -> Int32 {
+        await MainActor.run {
+            let p = Preferences()
+            p.customFolderPath = path
+            p.outputMode = .customFolder
+            p.openFolderWhenDone = false
+            print("[selftest] écrit → mode=\(p.outputMode.rawValue) "
+                + "path=\(p.customFolderPath) open=\(p.openFolderWhenDone)")
+        }
+        UserDefaults.standard.synchronize()
+        return 0
+    }
+
+    private static func prefsRead() async -> Int32 {
+        await MainActor.run {
+            let p = Preferences()
+            print("[selftest] relu  → mode=\(p.outputMode.rawValue) "
+                + "path=\(p.customFolderPath) open=\(p.openFolderWhenDone)")
+        }
+        return 0
     }
 
     // MARK: - Exécution synchrone (on bloque le main le temps du test, puis exit)
@@ -37,18 +94,24 @@ enum SelfTest {
         let sem = DispatchSemaphore(value: 0)
         // `nonisolated(unsafe)` : accès unique après signal(), pas de course réelle.
         nonisolated(unsafe) var code: Int32 = 0
-        Task.detached {
+        Task {
             code = await body()
             sem.signal()
         }
-        sem.wait()
+        // On attend la fin en faisant tourner la run loop principale : ainsi le
+        // travail isolé @MainActor (ex. lecture/écriture des réglages) peut
+        // s'exécuter sans interblocage avec l'attente sur le thread principal.
+        while sem.wait(timeout: .now() + 0.02) == .timedOut {
+            CFRunLoopRunInMode(CFRunLoopMode.defaultMode, 0.02, true)
+        }
         exit(code)
     }
 
     // MARK: - Test 1 : pipeline complet
 
     private static func runPipeline(inputPath: String, language: TranscriptionLanguage,
-                                    reveal: Bool = false) async -> Int32 {
+                                    reveal: Bool = false,
+                                    outputDirectory: URL? = nil) async -> Int32 {
         let input = URL(fileURLWithPath: inputPath)
         print("[selftest] entrée : \(input.path)")
 
@@ -79,8 +142,13 @@ enum SelfTest {
                 language: language, quality: .maximum
             ) { _ in }
 
-            // 3) Export
-            let (srt, txt) = try SubtitleExporter.export(segments: segments, sourceURL: input)
+            // 3) Export (dossier personnalisé si fourni via --out)
+            if let outputDirectory {
+                print("[selftest] dossier de sortie : \(outputDirectory.path)")
+            }
+            let (srt, txt) = try SubtitleExporter.export(
+                segments: segments, sourceURL: input, outputDirectory: outputDirectory
+            )
 
             // 4) Nettoyage du temporaire
             try? FileManager.default.removeItem(at: wav)

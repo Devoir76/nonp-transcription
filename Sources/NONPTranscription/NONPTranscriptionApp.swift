@@ -9,6 +9,9 @@ import SwiftUI
 @main
 struct NONPTranscriptionApp: App {
 
+    // Réglages partagés entre la fenêtre principale et la fenêtre Réglages.
+    @StateObject private var preferences = Preferences()
+
     init() {
         // Mode test headless (--selftest …) : exécute le pipeline et quitte.
         // Sans effet en usage normal.
@@ -18,12 +21,20 @@ struct NONPTranscriptionApp: App {
     var body: some Scene {
         WindowGroup {
             ContentView()
+                .environmentObject(preferences)
         }
         // La fenêtre s'ajuste à la taille du contenu (design épuré, une seule fenêtre).
         .windowResizability(.contentSize)
         // On retire l'onglet « Nouvelle fenêtre » : l'app n'a qu'une fenêtre.
         .commands {
             CommandGroup(replacing: .newItem) {}
+        }
+
+        // Fenêtre Réglages : ajoute automatiquement l'entrée de menu
+        // « Réglages… » (⌘,) dans le menu de l'application.
+        Settings {
+            PreferencesView()
+                .environmentObject(preferences)
         }
     }
 }
