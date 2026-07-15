@@ -1,0 +1,56 @@
+# ===== Compilation Swift / SwiftPM =====
+.build/
+.swiftpm/
+Package.resolved
+
+# ===== Application construite =====
+dist/
+
+# ===== Modèles Whisper (téléchargés, jamais versionnés — plusieurs Go) =====
+# NB : les modèles vivent dans ~/Library/Application Support/, hors du dépôt.
+# On n'exclut donc PAS un dossier nommé « Models/ » (cela masquerait par erreur
+# le dossier de code source Sources/.../Models/). Les motifs *.bin suffisent.
+*.bin
+ggml-*.bin
+
+# ===== Résultats de transcription =====
+*.srt
+*.txt
+# (exception : on garde les éventuels fichiers de documentation .txt volontaires)
+!LICENSE.txt
+
+# ===== Fichiers temporaires / de travail =====
+*.wav
+nonp-*.wav
+*.tmp
+*.log
+tmp/
+temp/
+Resources/AppIcon.iconset/   # intermédiaire régénérable (on garde AppIcon.icns)
+
+# ===== Données propres à macOS =====
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+.Spotlight-V100
+.Trashes
+.fseventsd
+.DocumentRevisions-V100
+.TemporaryItems
+
+# ===== Fichiers locaux / sensibles =====
+.env
+.env.*
+*.local
+*.secret
+*.key
+*.pem
+secrets/
+config.local.*
+
+# ===== Éditeurs / IDE =====
+.vscode/
+.idea/
+*.swp
+xcuserdata/

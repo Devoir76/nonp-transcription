@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Info.plist — carte d'identité du bundle .app.
+     Copiée telle quelle dans NONP Transcription.app/Contents/ par build_app.sh. -->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>NONP Transcription</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>NONP Transcription</string>
+
+    <!-- Nom du binaire dans Contents/MacOS/ -->
+    <key>CFBundleExecutable</key>
+    <string>NONPTranscription</string>
+
+    <key>CFBundleIdentifier</key>
+    <string>com.nonp.transcription</string>
+
+    <!-- Icône de l'application (AppIcon.icns copié dans Resources/) -->
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>0.1.0</string>
+
+    <key>CFBundleVersion</key>
+    <string>1</string>
+
+    <!-- macOS 14 minimum, cohérent avec Package.swift -->
+    <key>LSMinimumSystemVersion</key>
+    <string>14.0</string>
+
+    <!-- Rendu Retina net -->
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
+    <!-- Application avec fenêtre normale (icône dans le Dock) -->
+    <key>LSUIElement</key>
+    <false/>
+</dict>
+</plist>
