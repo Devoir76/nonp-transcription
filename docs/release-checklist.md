@@ -32,6 +32,37 @@ effectuer avant de poser un tag de version. Aucune automatisation ici.
 - [ ] Commit du binaire validé, identifié sans ambiguïté
 - [ ] Tag `v1.1.0` posé exactement sur ce commit
 
+## Test de mise à niveau depuis V1.0 (release production uniquement)
+
+À exécuter sur le `.app` de release (`--release`, identifiant
+`com.nonp.transcription`), **jamais** sur le build `.test`. Vérifie qu'une
+installation existante en V1.0 passe proprement à la V1.1.
+
+Ordre impératif :
+
+1. [ ] **Archiver la V1.0 d'abord — ne pas la supprimer.** Créer une archive
+   **ZIP non exécutable** de `/Applications/NONP Transcription.app`, conservée
+   pour permettre un retour arrière.
+2. [ ] **Installer réellement la V1.1** dans `/Applications`, en remplacement effectif
+   de la V1.0.
+3. [ ] **Lancer la bonne version** : « À propos » = `1.1.0`, identifiant de bundle
+   = `com.nonp.transcription` (production).
+4. [ ] **Absence de redirection** vers une ancienne copie : LaunchServices ouvre bien
+   la V1.1 de `/Applications` (aucune copie V1.0 résiduelle ne prend la main).
+5. [ ] **Valeurs par défaut correctes** : la V1.0 n'ayant aucun réglage, la V1.1 doit
+   démarrer sur ses défauts (sortie « à côté de la vidéo », ouverture automatique
+   activée). Ce test vérifie les défauts, pas une reprise de réglages inexistants.
+6. [ ] **Reconnaissance du modèle existant** : le modèle déjà téléchargé
+   (`~/Library/Application Support/NONP Transcription/Models/`) est reconnu ;
+   **aucun téléchargement de 2,9 Go** n'est déclenché.
+
+Test séparé (persistance des nouveaux réglages) :
+
+7. [ ] **Persistance après relance** : modifier un réglage dans la V1.1, **quitter
+   (⌘Q) puis relancer** → le réglage est conservé.
+
+En cas d'anomalie : **restaurer la V1.0 depuis l'archive ZIP** (retour arrière).
+
 ## Règle de versionnement
 
 À partir de **V1.1**, le **tag Git** et `CFBundleShortVersionString` **doivent
