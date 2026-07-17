@@ -19,6 +19,19 @@ ggml-*.bin
 # (exception : on garde les éventuels fichiers de documentation .txt volontaires)
 !LICENSE.txt
 
+# ===== Médias source (jamais versionnés) =====
+# Vidéos et audio déposés/transcrits : ne doivent jamais entrer dans le dépôt.
+*.mp4
+*.mov
+*.mkv
+*.avi
+*.m4a
+*.mp3
+*.aac
+*.ogg
+*.opus
+*.flac
+
 # ===== Fichiers temporaires / de travail =====
 *.wav
 nonp-*.wav
@@ -54,3 +67,23 @@ config.local.*
 .idea/
 *.swp
 xcuserdata/
+
+# ===== Banc de test =====
+# Exclusion CIBLÉE des seuls artefacts générés (PAS une exclusion globale Bench/).
+# NB : gitignore n'accepte pas de commentaire en fin de ligne — motifs seuls.
+#   Bench/clips/        : audio synthétique régénérable
+#   Bench/results/      : sorties de transcription intermédiaires
+#   Bench/results-real/ : sorties de vidéos réelles (contenus tiers + chemins locaux)
+Bench/clips/
+Bench/results/
+Bench/results-real/
+# À CONSERVER versionnables :
+#  - les scripts du banc (*.sh, *.py) : aucun motif ne les exclut, donc suivis par défaut ;
+#  - le golden-master Bench/golden/ : ré-inclusion explicite, car les règles globales
+#    *.wav / *.srt / *.txt le masqueraient sinon.
+!Bench/golden/
+!Bench/golden/*.wav
+!Bench/golden/*.srt
+!Bench/golden/*.txt
+!Bench/golden/*.json
+!Bench/golden/*.md
