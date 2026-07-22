@@ -9,6 +9,9 @@ import SwiftUI
 struct ContentView: View {
     @StateObject private var state = AppState()
 
+    /// Réglages persistants (dossier de sortie, ouverture auto).
+    @EnvironmentObject private var preferences: Preferences
+
     /// Gère le téléchargement du modèle (partagé avec ModelStatusView).
     @StateObject private var downloader = ModelDownloader()
 
@@ -123,7 +126,30 @@ struct ContentView: View {
             installedChanged: { modelInstalled = $0 }
         )
 
+        outputTargetRow
+
         transcribeButton
+    }
+
+    /// Rappel discret de la destination des fichiers (réglable dans les Réglages).
+    private var outputTargetRow: some View {
+        HStack(spacing: 6) {
+            Image(systemName: "folder")
+            Text(outputTargetDescription)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer()
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+    }
+
+    private var outputTargetDescription: String {
+        if preferences.outputMode == .customFolder, preferences.customFolderIsUsable,
+           let url = preferences.customFolderURL {
+            return "Sortie : \(url.path)"
+        }
+        return "Sortie : à côté de la vidéo"
     }
 
     // MARK: - Sous-vues
@@ -193,7 +219,9 @@ struct ContentView: View {
                 mediaFile: file,
                 language: state.language,
                 quality: state.quality,
-                tools: tools
+                tools: tools,
+                outputDirectory: preferences.outputDirectory(for: file.url),
+                openWhenDone: preferences.openFolderWhenDone
             )
         } label: {
             Text("Transcrire")

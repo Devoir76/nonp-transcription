@@ -14,6 +14,9 @@
     <key>CFBundleExecutable</key>
     <string>NONPTranscription</string>
 
+    <!-- Identifiant de PRODUCTION. Les builds de test reçoivent l'identifiant
+         « com.nonp.transcription.test » appliqué par Scripts/build_app.sh, afin
+         que macOS ne confonde jamais la build de test avec la version installée. -->
     <key>CFBundleIdentifier</key>
     <string>com.nonp.transcription</string>
 
@@ -24,11 +27,12 @@
     <key>CFBundlePackageType</key>
     <string>APPL</string>
 
+    <!-- Version affichée dans la fenêtre « À propos ». -->
     <key>CFBundleShortVersionString</key>
-    <string>0.1.0</string>
+    <string>1.1.0</string>
 
     <key>CFBundleVersion</key>
-    <string>1</string>
+    <string>4</string>
 
     <!-- macOS 14 minimum, cohérent avec Package.swift -->
     <key>LSMinimumSystemVersion</key>

@@ -8,9 +8,18 @@
 # l'Info.plist, puis (optionnellement) lance l'app.
 #
 # Usage :
-#   ./Scripts/build_app.sh          → compile (release) et assemble le .app
-#   ./Scripts/build_app.sh --run    → idem puis lance l'application
-#   ./Scripts/build_app.sh --debug  → compile en debug (plus rapide à compiler)
+#   ./Scripts/build_app.sh            → build de TEST (identifiant .test) dans dist/
+#   ./Scripts/build_app.sh --run      → idem puis lance l'application
+#   ./Scripts/build_app.sh --debug    → compilation debug (plus rapide)
+#   ./Scripts/build_app.sh --release  → build de PRODUCTION (identifiant normal)
+#
+# Pourquoi deux identifiants ?
+# Deux bundles portant le MÊME CFBundleIdentifier sont indiscernables pour
+# LaunchServices : macOS lance alors la copie de /Applications même quand on
+# double-clique sur celle de dist/, et ce silencieusement. La build de test
+# reçoit donc « com.nonp.transcription.test » pour rester totalement
+# indépendante de la version installée. --release conserve l'identifiant de
+# production (à utiliser uniquement pour installer une version de référence).
 
 set -euo pipefail
 
@@ -28,13 +37,22 @@ APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 # --- Options --------------------------------------------------------------
 CONFIG="release"
 DO_RUN="no"
+FLAVOR="test"                          # test (défaut) | production
 for arg in "$@"; do
     case "$arg" in
-        --run)   DO_RUN="yes" ;;
-        --debug) CONFIG="debug" ;;
+        --run)     DO_RUN="yes" ;;
+        --debug)   CONFIG="debug" ;;
+        --release) FLAVOR="production" ;;
         *) echo "Option inconnue : $arg" >&2; exit 1 ;;
     esac
 done
+
+# Identifiant appliqué au bundle selon le type de build.
+if [[ "$FLAVOR" == "test" ]]; then
+    BUNDLE_ID="com.nonp.transcription.test"
+else
+    BUNDLE_ID="com.nonp.transcription"
+fi
 
 # --- 1) Compilation SwiftPM ----------------------------------------------
 echo "▸ Compilation ($CONFIG)…"
@@ -54,6 +72,9 @@ mkdir -p "$APP_BUNDLE/Contents/Resources"
 
 cp "$BUILD_BIN" "$APP_BUNDLE/Contents/MacOS/$EXECUTABLE_NAME"
 cp "$PROJECT_ROOT/Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
+
+# Applique l'identifiant correspondant au type de build (avant signature).
+plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" "$APP_BUNDLE/Contents/Info.plist"
 
 # Icône de l'application (si présente).
 if [[ -f "$PROJECT_ROOT/Resources/AppIcon.icns" ]]; then
@@ -83,7 +104,20 @@ codesign --force --deep --sign - "$APP_BUNDLE" 2>/dev/null || {
     echo "  (signature ad-hoc ignorée — non bloquant en local)"
 }
 
+VERSION=$(plutil -extract CFBundleShortVersionString raw "$APP_BUNDLE/Contents/Info.plist")
 echo "✓ Application prête : $APP_BUNDLE"
+if [[ "$FLAVOR" == "test" ]]; then
+    echo "  ┌──────────────────────────────────────────────────────────────┐"
+    echo "  │ BUILD DE TEST — version $VERSION — identifiant $BUNDLE_ID"
+    echo "  │ Indépendante de la version installée dans /Applications.      │"
+    echo "  │ Ne PAS installer telle quelle : utiliser --release pour cela. │"
+    echo "  └──────────────────────────────────────────────────────────────┘"
+else
+    echo "  ┌──────────────────────────────────────────────────────────────┐"
+    echo "  │ BUILD DE PRODUCTION — version $VERSION — identifiant $BUNDLE_ID"
+    echo "  │ Destinée à remplacer la version de référence (/Applications). │"
+    echo "  └──────────────────────────────────────────────────────────────┘"
+fi
 
 # --- 4) Lancement optionnel ----------------------------------------------
 if [[ "$DO_RUN" == "yes" ]]; then

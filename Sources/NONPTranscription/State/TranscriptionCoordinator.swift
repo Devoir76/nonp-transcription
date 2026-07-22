@@ -53,7 +53,9 @@ final class TranscriptionCoordinator: ObservableObject {
         mediaFile: MediaFile,
         language: TranscriptionLanguage,
         quality: QualityPreset,
-        tools: EmbeddedTools
+        tools: EmbeddedTools,
+        outputDirectory: URL,
+        openWhenDone: Bool
     ) {
         guard !isRunning else { return }
 
@@ -72,7 +74,9 @@ final class TranscriptionCoordinator: ObservableObject {
                 language: language,
                 quality: quality,
                 modelPath: modelPath,
-                tools: tools
+                tools: tools,
+                outputDirectory: outputDirectory,
+                openWhenDone: openWhenDone
             )
         }
     }
@@ -97,7 +101,9 @@ final class TranscriptionCoordinator: ObservableObject {
         language: TranscriptionLanguage,
         quality: QualityPreset,
         modelPath: URL,
-        tools: EmbeddedTools
+        tools: EmbeddedTools,
+        outputDirectory: URL,
+        openWhenDone: Bool
     ) async {
         let extractor = FFmpegAudioExtractor(ffmpeg: tools.ffmpeg)
         let engine = WhisperCppEngine(whisperCLI: tools.whisperCLI)
@@ -123,20 +129,27 @@ final class TranscriptionCoordinator: ObservableObject {
             }
             try Task.checkCancellation()
 
-            // 3) Export SRT + TXT à côté de la source
+            // 3) Export SRT + TXT dans le dossier de sortie choisi.
+            //    L'exportateur se replie auprès de la vidéo si ce dossier est
+            //    devenu inaccessible : les URL renvoyées font foi.
             phase = .exporting
             let (srt, txt) = try SubtitleExporter.export(
-                segments: segments, sourceURL: sourceURL
+                segments: segments, sourceURL: sourceURL,
+                outputDirectory: outputDirectory
             )
 
             // 4) Nettoyage du temporaire + fin
             removeTemporary(temporaryWAV)
             stopClock()
-            let directory = sourceURL.deletingLastPathComponent()
-            phase = .finished(directory: directory, srt: srt, txt: txt)
+            // Dossier RÉELLEMENT utilisé, et non celui demandé : après un repli,
+            // les deux diffèrent.
+            phase = .finished(directory: srt.deletingLastPathComponent(),
+                              srt: srt, txt: txt)
 
-            // 5) Ouverture automatique du dossier, fichiers sélectionnés
-            NSWorkspace.shared.activateFileViewerSelecting([srt, txt])
+            // 5) Ouverture automatique du dossier de sortie (si le réglage l'autorise)
+            if openWhenDone {
+                NSWorkspace.shared.activateFileViewerSelecting([srt, txt])
+            }
 
         } catch {
             // Nettoyage systématique du WAV temporaire.
