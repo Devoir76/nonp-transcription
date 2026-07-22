@@ -8,6 +8,9 @@
 // Usages :
 //   NONPTranscription --selftest <fichier> [--lang-en]
 //   NONPTranscription --selftest-cancel <fichier>   (teste l'annulation propre)
+//   NONPTranscription --prefs-cases                 (persistance, même process)
+//   NONPTranscription --prefs-write                 (persistance, process 1/2)
+//   NONPTranscription --prefs-read                  (persistance, process 2/2)
 
 import Foundation
 import AppKit   // pour NSWorkspace (ouverture du dossier), via --reveal
@@ -38,10 +41,15 @@ enum SelfTest {
             runBlocking { await runCancelTest(inputPath: path) }
         }
 
-        // Persistance des réglages : écriture (process 1) puis lecture (process 2).
-        if let i = args.firstIndex(of: "--prefs-write"), i + 1 < args.count {
-            let path = args[i + 1]
-            runBlocking { await prefsWrite(path) }
+        // Persistance des réglages : aller-retour dans le MÊME process (cache).
+        if args.contains("--prefs-cases") {
+            runBlocking { await prefsCases() }
+        }
+        // Persistance CROSS-PROCESS : écriture (process 1) puis lecture (process 2).
+        // Seul test qui exerce le vrai mode d'échec de BUG-006 — la persistance
+        // adossée au disque, entre deux lancements distincts.
+        if args.contains("--prefs-write") {
+            runBlocking { await prefsWrite() }
         }
         if args.contains("--prefs-read") {
             runBlocking { await prefsRead() }
@@ -278,28 +286,180 @@ enum SelfTest {
         try? fm.removeItem(at: root)
     }
 
-    // MARK: - Test de persistance des réglages
+    // MARK: - Test de persistance des réglages (BUG-006)
 
-    private static func prefsWrite(_ path: String) async -> Int32 {
-        await MainActor.run {
-            let p = Preferences()
-            p.customFolderPath = path
-            p.outputMode = .customFolder
-            p.openFolderWhenDone = false
-            print("[selftest] écrit → mode=\(p.outputMode.rawValue) "
-                + "path=\(p.customFolderPath) open=\(p.openFolderWhenDone)")
+    /// Suite de test à NOM FIXE : partagée entre le process d'écriture et celui
+    /// de lecture. Jamais le domaine standard — les réglages réels de
+    /// l'utilisateur ne sont touchés par aucun de ces tests.
+    private static let prefsSuite = "com.nonp.transcription.selftest"
+
+    /// Valeurs témoins de l'aller-retour cross-process. Le chemin est fictif :
+    /// aucun dossier réel de l'utilisateur n'apparaît jamais ici.
+    private static let probeMode: Preferences.OutputMode = .customFolder
+    private static let probePath = "/tmp/nonp-selftest-crossprocess"
+    private static let probeOpen = false
+
+    /// Petit compteur d'assertions, commun aux blocs de persistance.
+    private final class Checker {
+        var total = 0, failures = 0
+        func check(_ label: String, _ ok: Bool, _ detail: String = "") {
+            total += 1
+            if !ok { failures += 1 }
+            print("[selftest] \(ok ? "OK  " : "ÉCHEC") — \(label)"
+                + (detail.isEmpty ? "" : " · \(detail)"))
         }
-        UserDefaults.standard.synchronize()
-        return 0
+        func report(_ title: String) -> Int32 {
+            print("[selftest] bilan \(title) : "
+                + (failures == 0 ? "\(total)/\(total) OK" : "\(failures)/\(total) échec(s)"))
+            return failures == 0 ? 0 : 7
+        }
     }
 
-    private static func prefsRead() async -> Int32 {
-        await MainActor.run {
-            let p = Preferences()
-            print("[selftest] relu  → mode=\(p.outputMode.rawValue) "
-                + "path=\(p.customFolderPath) open=\(p.openFolderWhenDone)")
+    /// Snapshot des trois clés du domaine RÉEL, pour prouver qu'aucun test de
+    /// persistance ne l'altère.
+    private static func standardSnapshot() -> String {
+        ["outputMode", "customFolderPath", "openFolderWhenDone"]
+            .map { "\($0)=\(String(describing: UserDefaults.standard.object(forKey: $0)))" }
+            .joined(separator: " ")
+    }
+
+    /// Aller-retour vérifié sur les trois réglages, dans une suite ISOLÉE et un
+    /// SEUL process : valide la cohérence écriture → relecture (cache).
+    /// Ne prouve rien sur la persistance disque — c'est le rôle du cross-process.
+    private static func prefsCases() async -> Int32 {
+        let suiteName = "\(prefsSuite)-\(getpid())"
+        guard let suite = UserDefaults(suiteName: suiteName) else {
+            print("[selftest] ÉCHEC : suite de test non créée")
+            return 7
         }
-        return 0
+        defer { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
+
+        let k = Checker()
+        let before = standardSnapshot()
+
+        await MainActor.run {
+            // Valeurs d'origine dans la suite, à restaurer en fin de test.
+            let origin = Preferences(defaults: suite)
+            let o0 = origin.outputMode, o1 = origin.customFolderPath
+            let o2 = origin.openFolderWhenDone
+
+            let a = Preferences(defaults: suite)
+
+            // 1 — outputMode, dans les deux sens.
+            a.outputMode = .customFolder
+            k.check("1. outputMode écrit → relu à l'identique",
+                    Preferences(defaults: suite).outputMode == .customFolder)
+            a.outputMode = .sourceFolder
+            k.check("1b. outputMode rebasculé → relu à l'identique",
+                    Preferences(defaults: suite).outputMode == .sourceFolder)
+
+            // 2 — customFolderPath (valeur connue, jamais un chemin réel).
+            let probe = "/tmp/nonp-selftest-\(getpid())"
+            a.customFolderPath = probe
+            k.check("2. customFolderPath écrit → relu à l'identique",
+                    Preferences(defaults: suite).customFolderPath == probe)
+            a.customFolderPath = ""
+            k.check("2b. customFolderPath vidé → relu vide",
+                    Preferences(defaults: suite).customFolderPath.isEmpty)
+
+            // 3 — openFolderWhenDone : les DEUX valeurs. `false` est le cas
+            //     piégeux — une clé à sa valeur par défaut peut être absente.
+            a.openFolderWhenDone = false
+            k.check("3. openFolderWhenDone=false écrit → relu false",
+                    Preferences(defaults: suite).openFolderWhenDone == false)
+            k.check("3b. openFolderWhenDone=false stocké EXPLICITEMENT",
+                    suite.object(forKey: "openFolderWhenDone") != nil)
+            a.openFolderWhenDone = true
+            k.check("3c. openFolderWhenDone=true écrit → relu true",
+                    Preferences(defaults: suite).openFolderWhenDone == true)
+
+            // 4 — indépendance des clés (constat du cycle 5 de la campagne 19/07).
+            a.customFolderPath = probe
+            a.outputMode = .customFolder
+            a.openFolderWhenDone = false
+            let b = Preferences(defaults: suite)
+            b.outputMode = .sourceFolder
+            let c = Preferences(defaults: suite)
+            k.check("4. quitter le mode dossier fixe CONSERVE customFolderPath",
+                    c.customFolderPath == probe, c.customFolderPath)
+            k.check("4b. ... et n'altère pas openFolderWhenDone",
+                    c.openFolderWhenDone == false)
+
+            // 5 — restauration des valeurs d'origine, puis vérification.
+            let r = Preferences(defaults: suite)
+            r.outputMode = o0; r.customFolderPath = o1; r.openFolderWhenDone = o2
+            let back = Preferences(defaults: suite)
+            k.check("5. valeurs d'origine restaurées",
+                    back.outputMode == o0 && back.customFolderPath == o1
+                    && back.openFolderWhenDone == o2)
+        }
+
+        // 5b — contrôle réel : le domaine de l'utilisateur n'a pas bougé.
+        let after = standardSnapshot()
+        k.check("5b. domaine standard inchangé par le test", before == after,
+                before == after ? "" : "avant=[\(before)] après=[\(after)]")
+
+        return k.report("persistance même-process (BUG-006)")
+    }
+
+    /// Process 1/2 — écrit les valeurs témoins dans la suite isolée à nom fixe.
+    /// PAS de `synchronize()` : le parcours GUI ne l'appelle jamais, et la fiche
+    /// BUG-006 note que son usage rendait l'ancien test non représentatif.
+    private static func prefsWrite() async -> Int32 {
+        guard let suite = UserDefaults(suiteName: prefsSuite) else {
+            print("[selftest] ÉCHEC : suite de test non créée")
+            return 7
+        }
+        let k = Checker()
+        let before = standardSnapshot()
+
+        await MainActor.run {
+            let p = Preferences(defaults: suite)
+            p.outputMode = probeMode
+            p.customFolderPath = probePath
+            p.openFolderWhenDone = probeOpen
+            k.check("W1. outputMode écrit en mémoire", p.outputMode == probeMode)
+            k.check("W2. customFolderPath écrit en mémoire", p.customFolderPath == probePath)
+            k.check("W3. openFolderWhenDone écrit en mémoire", p.openFolderWhenDone == probeOpen)
+        }
+
+        let after = standardSnapshot()
+        k.check("W4. domaine standard inchangé par l'écriture", before == after,
+                before == after ? "" : "avant=[\(before)] après=[\(after)]")
+        return k.report("persistance cross-process 1/2 — écriture")
+    }
+
+    /// Process 2/2 — relit la suite isolée dans un process NEUF : c'est le seul
+    /// test qui exerce la persistance adossée au disque, entre deux lancements.
+    private static func prefsRead() async -> Int32 {
+        guard let suite = UserDefaults(suiteName: prefsSuite) else {
+            print("[selftest] ÉCHEC : suite de test non créée")
+            return 7
+        }
+        let k = Checker()
+        let before = standardSnapshot()
+
+        await MainActor.run {
+            let p = Preferences(defaults: suite)
+            k.check("R1. outputMode a survécu au changement de process",
+                    p.outputMode == probeMode, p.outputMode.rawValue)
+            k.check("R2. customFolderPath a survécu au changement de process",
+                    p.customFolderPath == probePath,
+                    "longueur=\(p.customFolderPath.count)")
+            k.check("R3. openFolderWhenDone a survécu au changement de process",
+                    p.openFolderWhenDone == probeOpen,
+                    String(p.openFolderWhenDone))
+            k.check("R4. openFolderWhenDone=false présent EXPLICITEMENT",
+                    suite.object(forKey: "openFolderWhenDone") != nil)
+        }
+
+        let after = standardSnapshot()
+        k.check("R5. domaine standard inchangé par la lecture", before == after,
+                before == after ? "" : "avant=[\(before)] après=[\(after)]")
+
+        // Nettoyage : la suite ne survit pas au test.
+        UserDefaults.standard.removePersistentDomain(forName: prefsSuite)
+        return k.report("persistance cross-process 2/2 — lecture")
     }
 
     // MARK: - Exécution synchrone (on bloque le main le temps du test, puis exit)
