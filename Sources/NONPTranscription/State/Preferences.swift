@@ -6,9 +6,34 @@
 // Réglages gérés :
 //  • le dossier de sortie (à côté de la vidéo — défaut — ou un dossier fixe) ;
 //  • l'ouverture automatique du dossier de sortie en fin de transcription.
+//
+// Journalisation de diagnostic (BUG-006) : chaque écriture et chaque relecture
+// des trois réglages est tracée dans la journalisation unifiée de macOS via
+// os_log. Tout reste LOCAL — aucun réseau, aucun fichier créé. Le chemin du
+// dossier n'est jamais journalisé en clair : seule une empreinte tronquée,
+// non réversible, est publique. Voir PRIVACY.md.
 
 import Foundation
 import AppKit
+import os
+import CryptoKit
+
+/// Sous-système de journalisation. Dérivé de l'identifiant de bundle : il suit
+/// donc automatiquement un futur changement de nom. Le repli couvre le binaire
+/// nu du harnais de test, qui n'a pas de bundle.
+private let prefsLogSubsystem = Bundle.main.bundleIdentifier ?? "com.nonp.transcription"
+
+/// Journal dédié : filtrable par `log show --predicate 'category == "preferences"'`.
+private let prefsLog = Logger(subsystem: prefsLogSubsystem, category: "preferences")
+
+/// Empreinte courte et non réversible, pour comparer une valeur écrite et une
+/// valeur relue SANS jamais exposer le chemin de l'utilisateur.
+private func fingerprint(_ s: String) -> String {
+    guard !s.isEmpty else { return "vide" }
+    let hex = SHA256.hash(data: Data(s.utf8)).prefix(4)
+        .map { String(format: "%02x", $0) }.joined()
+    return "\(hex)/\(s.count)"
+}
 
 @MainActor
 final class Preferences: ObservableObject {
@@ -22,35 +47,92 @@ final class Preferences: ObservableObject {
     // MARK: - Réglages publiés (l'UI les observe ; toute modif est sauvegardée)
 
     @Published var outputMode: OutputMode {
-        didSet { defaults.set(outputMode.rawValue, forKey: Keys.outputMode) }
+        didSet {
+            defaults.set(outputMode.rawValue, forKey: Keys.outputMode)
+            trace(Keys.outputMode, wrote: outputMode.rawValue,
+                  reread: defaults.string(forKey: Keys.outputMode))
+        }
     }
 
     /// Chemin du dossier fixe (vide tant qu'aucun n'est choisi).
     @Published var customFolderPath: String {
-        didSet { defaults.set(customFolderPath, forKey: Keys.customFolderPath) }
+        didSet {
+            defaults.set(customFolderPath, forKey: Keys.customFolderPath)
+            tracePath(Keys.customFolderPath, wrote: customFolderPath,
+                      reread: defaults.string(forKey: Keys.customFolderPath))
+        }
     }
 
     /// Ouvrir automatiquement le dossier de sortie à la fin.
     @Published var openFolderWhenDone: Bool {
-        didSet { defaults.set(openFolderWhenDone, forKey: Keys.openFolderWhenDone) }
+        didSet {
+            defaults.set(openFolderWhenDone, forKey: Keys.openFolderWhenDone)
+            trace(Keys.openFolderWhenDone, wrote: String(openFolderWhenDone),
+                  reread: (defaults.object(forKey: Keys.openFolderWhenDone)
+                           as? Bool).map(String.init))
+        }
     }
 
     // MARK: - Stockage
 
-    private let defaults = UserDefaults.standard
+    private let defaults: UserDefaults
     private enum Keys {
         static let outputMode = "outputMode"
         static let customFolderPath = "customFolderPath"
         static let openFolderWhenDone = "openFolderWhenDone"
     }
 
-    init() {
+    /// `defaults` est injectable UNIQUEMENT pour les tests (domaine isolé).
+    /// En usage normal, le comportement est strictement inchangé.
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
         // Rechargement des valeurs sauvegardées (avec des défauts sûrs).
         let savedMode = defaults.string(forKey: Keys.outputMode)
         outputMode = savedMode.flatMap(OutputMode.init) ?? .sourceFolder
         customFolderPath = defaults.string(forKey: Keys.customFolderPath) ?? ""
         // Par défaut : on ouvre le dossier à la fin (comportement attendu).
         openFolderWhenDone = (defaults.object(forKey: Keys.openFolderWhenDone) as? Bool) ?? true
+        traceLoad()
+    }
+
+    // MARK: - Journalisation de diagnostic (BUG-006)
+
+    /// Trace une écriture non sensible et son verdict de relecture immédiate.
+    /// La relecture est une lecture pure : aucun effet de bord.
+    private func trace(_ key: String, wrote: String, reread: String?) {
+        let verdict = (reread == wrote) ? "conforme" : "DIVERGENT"
+        prefsLog.notice("""
+            écriture clé=\(key, privacy: .public) \
+            valeur=\(wrote, privacy: .public) \
+            relecture=\(verdict, privacy: .public)
+            """)
+    }
+
+    /// Idem, pour une valeur SENSIBLE : empreinte en public, brut en privé.
+    private func tracePath(_ key: String, wrote: String, reread: String?) {
+        let verdict = (reread == wrote) ? "conforme" : "DIVERGENT"
+        prefsLog.notice("""
+            écriture clé=\(key, privacy: .public) \
+            empreinte=\(fingerprint(wrote), privacy: .public) \
+            relecture=\(verdict, privacy: .public) \
+            valeur=\(wrote, privacy: .private)
+            """)
+    }
+
+    /// Trace l'état des trois clés au chargement : PRÉSENTE ou ABSENTE.
+    /// Trois « absente » après une relance, c'est la signature de BUG-006.
+    private func traceLoad() {
+        func state(_ key: String) -> String {
+            defaults.object(forKey: key) == nil ? "absente" : "présente"
+        }
+        let m = state(Keys.outputMode), p = state(Keys.customFolderPath)
+        let o = state(Keys.openFolderWhenDone)
+        prefsLog.notice("""
+            chargement \
+            outputMode=\(m, privacy: .public)/\(self.outputMode.rawValue, privacy: .public) \
+            customFolderPath=\(p, privacy: .public)/\(fingerprint(self.customFolderPath), privacy: .public) \
+            openFolderWhenDone=\(o, privacy: .public)/\(String(self.openFolderWhenDone), privacy: .public)
+            """)
     }
 
     // MARK: - Dossier de sortie
