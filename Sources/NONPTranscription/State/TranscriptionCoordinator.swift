@@ -129,7 +129,9 @@ final class TranscriptionCoordinator: ObservableObject {
             }
             try Task.checkCancellation()
 
-            // 3) Export SRT + TXT dans le dossier de sortie choisi
+            // 3) Export SRT + TXT dans le dossier de sortie choisi.
+            //    L'exportateur se replie auprès de la vidéo si ce dossier est
+            //    devenu inaccessible : les URL renvoyées font foi.
             phase = .exporting
             let (srt, txt) = try SubtitleExporter.export(
                 segments: segments, sourceURL: sourceURL,
@@ -139,7 +141,10 @@ final class TranscriptionCoordinator: ObservableObject {
             // 4) Nettoyage du temporaire + fin
             removeTemporary(temporaryWAV)
             stopClock()
-            phase = .finished(directory: outputDirectory, srt: srt, txt: txt)
+            // Dossier RÉELLEMENT utilisé, et non celui demandé : après un repli,
+            // les deux diffèrent.
+            phase = .finished(directory: srt.deletingLastPathComponent(),
+                              srt: srt, txt: txt)
 
             // 5) Ouverture automatique du dossier de sortie (si le réglage l'autorise)
             if openWhenDone {

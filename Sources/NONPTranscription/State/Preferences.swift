@@ -62,11 +62,16 @@ final class Preferences: ObservableObject {
     }
 
     /// Vrai si le mode « dossier fixe » est actif ET le dossier est réellement utilisable.
+    /// « Utilisable » = il existe, c'est bien un dossier, ET il est inscriptible.
+    /// L'inscriptibilité est indispensable : un dossier en lecture seule est visible
+    /// et listable, mais y écrire échoue — sans ce contrôle, le traitement s'arrête
+    /// au lieu de se replier auprès de la vidéo.
     var customFolderIsUsable: Bool {
         guard let url = customFolderURL else { return false }
+        let fm = FileManager.default
         var isDir: ObjCBool = false
-        let exists = FileManager.default.fileExists(atPath: url.path, isDirectory: &isDir)
-        return exists && isDir.boolValue
+        let exists = fm.fileExists(atPath: url.path, isDirectory: &isDir)
+        return exists && isDir.boolValue && fm.isWritableFile(atPath: url.path)
     }
 
     /// Dossier de sortie EFFECTIF pour une source donnée.

@@ -27,35 +27,96 @@ enum SubtitleExporter {
     /// Écrit `<source>.srt` et `<source>.txt`.
     /// Par défaut dans le dossier du fichier source ; si `outputDirectory` est
     /// fourni, les fichiers y sont écrits (le nom reste celui de la source).
-    /// Renvoie les URL des deux fichiers créés.
+    ///
+    /// Repli : si le dossier demandé est absent ou non inscriptible, on écrit
+    /// auprès de la vidéo plutôt que d'interrompre le traitement. Une transcription
+    /// coûte plusieurs minutes de calcul ; un dossier de destination devenu
+    /// inaccessible ne doit pas la jeter. L'anti-collision est entièrement
+    /// recalculée dans le dossier de repli.
+    ///
+    /// Renvoie les URL des deux fichiers réellement créés — l'appelant ne doit
+    /// donc jamais supposer qu'ils se trouvent dans `outputDirectory`.
     @discardableResult
     static func export(segments: [TranscriptSegment], sourceURL: URL,
                        outputDirectory: URL? = nil) throws
         -> (srt: URL, txt: URL) {
 
-        // Dossier cible : personnalisé si fourni, sinon celui de la vidéo.
-        let directory = outputDirectory ?? sourceURL.deletingLastPathComponent()
+        // Dossier de repli : toujours celui de la vidéo.
+        let fallback = sourceURL.deletingLastPathComponent()
+        // Dossier cible : personnalisé si fourni, sinon le repli lui-même.
+        let preferred = outputDirectory ?? fallback
         let originalBase = sourceURL.deletingPathExtension().lastPathComponent
-
-        // Gestion des collisions : on ne réutilise un nom que si NI le .srt NI le
-        // .txt n'existent déjà. Sinon on incrémente un suffixe (_2, _3, …). Le
-        // même suffixe est appliqué aux deux fichiers pour qu'ils restent appariés.
-        let baseName = availableBaseName(in: directory, base: originalBase)
-        let srtURL = directory.appendingPathComponent(baseName + ".srt")
-        let txtURL = directory.appendingPathComponent(baseName + ".txt")
 
         let srtContent = makeSRT(segments)
         let txtContent = makeTXT(segments)
 
+        // Le dossier demandé est-il le dossier de repli ? Alors il n'y a rien à
+        // tenter deux fois : un échec est un échec définitif.
+        let preferredIsFallback =
+            preferred.standardizedFileURL.path == fallback.standardizedFileURL.path
+
+        // 1) Tentative dans le dossier demandé. On ne l'aborde que s'il est
+        //    inscriptible : inutile d'échouer pour le découvrir.
+        if isWritableDirectory(preferred) {
+            do {
+                return try writePair(srt: srtContent, txt: txtContent,
+                                     in: preferred, base: originalBase)
+            } catch {
+                // Course possible (volume démonté, disque plein…) : si le dossier
+                // demandé EST le repli, plus rien à tenter.
+                if preferredIsFallback {
+                    throw SubtitleExportError.writeFailed(error.localizedDescription)
+                }
+            }
+        } else if preferredIsFallback {
+            // Le dossier de la vidéo lui-même est inaccessible : échec net.
+            throw SubtitleExportError.writeFailed(
+                "Le dossier « \(fallback.lastPathComponent) » n'est pas accessible en écriture.")
+        }
+
+        // 2) Repli auprès de la vidéo, anti-collision recalculée sur place.
         do {
-            // Écriture atomique : pas de fichier à moitié écrit en cas d'interruption.
-            try srtContent.write(to: srtURL, atomically: true, encoding: .utf8)
-            try txtContent.write(to: txtURL, atomically: true, encoding: .utf8)
+            return try writePair(srt: srtContent, txt: txtContent,
+                                 in: fallback, base: originalBase)
         } catch {
             throw SubtitleExportError.writeFailed(error.localizedDescription)
         }
+    }
+
+    /// Écrit le couple SRT/TXT dans `directory` sous un nom de base disponible.
+    /// Garantie de non-écriture partielle : si le second fichier échoue, le premier
+    /// est retiré, afin de ne jamais laisser un SRT orphelin dans un dossier où le
+    /// repli va de toute façon produire le couple complet.
+    private static func writePair(srt srtContent: String, txt txtContent: String,
+                                  in directory: URL, base: String) throws
+        -> (srt: URL, txt: URL) {
+
+        // Gestion des collisions : on ne réutilise un nom que si NI le .srt NI le
+        // .txt n'existent déjà. Sinon on incrémente un suffixe (_2, _3, …). Le
+        // même suffixe est appliqué aux deux fichiers pour qu'ils restent appariés.
+        let baseName = availableBaseName(in: directory, base: base)
+        let srtURL = directory.appendingPathComponent(baseName + ".srt")
+        let txtURL = directory.appendingPathComponent(baseName + ".txt")
+
+        // Écriture atomique : pas de fichier à moitié écrit en cas d'interruption.
+        try srtContent.write(to: srtURL, atomically: true, encoding: .utf8)
+        do {
+            try txtContent.write(to: txtURL, atomically: true, encoding: .utf8)
+        } catch {
+            try? FileManager.default.removeItem(at: srtURL)
+            throw error
+        }
 
         return (srtURL, txtURL)
+    }
+
+    /// Vrai si `url` désigne un dossier existant et inscriptible.
+    static func isWritableDirectory(_ url: URL) -> Bool {
+        let fm = FileManager.default
+        var isDir: ObjCBool = false
+        guard fm.fileExists(atPath: url.path, isDirectory: &isDir), isDir.boolValue
+        else { return false }
+        return fm.isWritableFile(atPath: url.path)
     }
 
     /// Cherche un nom de base disponible dans `directory` : d'abord `base`, puis

@@ -51,6 +51,10 @@ enum SelfTest {
             let src = args[i + 1]
             runBlocking { await resolveOut(src) }
         }
+        // BUG-007 : repli du dossier de sortie. Six cas, sans le moteur.
+        if args.contains("--export-cases") {
+            runBlocking { await exportCases() }
+        }
     }
 
     /// Affiche le dossier de sortie EFFECTIF résolu par les réglages pour une source.
@@ -62,6 +66,175 @@ enum SelfTest {
                 + "customUsable=\(p.customFolderIsUsable) → sortie=\(dir.path)")
         }
         return 0
+    }
+
+    // MARK: - Test du repli de dossier de sortie (BUG-007)
+
+    /// Exerce le VRAI `SubtitleExporter` sur les six cas de résolution du dossier
+    /// de sortie. Segments synthétiques : le moteur n'est pas sollicité, le test
+    /// tient en une seconde et n'exige ni média ni modèle.
+    ///
+    /// NB : à exécuter en utilisateur non-root — root ignore les bits de permission,
+    /// et les cas « non inscriptible » deviendraient alors des faux négatifs.
+    private static func exportCases() async -> Int32 {
+        let fm = FileManager.default
+        let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("nonp-bug007-\(getpid())", isDirectory: true)
+        defer { forceRemove(root) }
+
+        guard geteuid() != 0 else {
+            print("[selftest] ÉCHEC : ne pas exécuter en root (permissions ignorées)")
+            return 6
+        }
+
+        let segments = [
+            TranscriptSegment(id: 1, startMs: 0, endMs: 1500, text: "Premier segment."),
+            TranscriptSegment(id: 2, startMs: 1500, endMs: 3000, text: "Second segment.")
+        ]
+        var failures = 0
+        func check(_ label: String, _ ok: Bool, _ detail: String = "") {
+            if !ok { failures += 1 }
+            print("[selftest] \(ok ? "OK  " : "ÉCHEC") — \(label)\(detail.isEmpty ? "" : " · \(detail)")")
+        }
+
+        /// Prépare un cas : un dossier vidéo contenant « sujet.mp4 », plus un dossier
+        /// fixe optionnel. Renvoie (source, dossierFixe).
+        func makeCase(_ name: String, fixedMode: Int16?) -> (src: URL, fixed: URL) {
+            let base = root.appendingPathComponent(name, isDirectory: true)
+            let videoDir = base.appendingPathComponent("video", isDirectory: true)
+            let fixedDir = base.appendingPathComponent("fixe", isDirectory: true)
+            try? fm.createDirectory(at: videoDir, withIntermediateDirectories: true)
+            let src = videoDir.appendingPathComponent("sujet.mp4")
+            fm.createFile(atPath: src.path, contents: Data("média factice".utf8))
+            if let mode = fixedMode {
+                try? fm.createDirectory(at: fixedDir, withIntermediateDirectories: true)
+                chmod(fixedDir.path, mode_t(mode))
+            }
+            return (src, fixedDir)
+        }
+        func exists(_ dir: URL, _ name: String) -> Bool {
+            fm.fileExists(atPath: dir.appendingPathComponent(name).path)
+        }
+
+        // Cas 1 — dossier fixe accessible : les fichiers y vont.
+        do {
+            let c = makeCase("cas1", fixedMode: 0o755)
+            let out = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
+                                                  outputDirectory: c.fixed)
+            check("1. dossier fixe accessible → écrit dans le dossier fixe",
+                  out.srt.deletingLastPathComponent().path == c.fixed.path
+                  && exists(c.fixed, "sujet.srt") && exists(c.fixed, "sujet.txt"),
+                  out.srt.path)
+        } catch {
+            check("1. dossier fixe accessible", false, error.localizedDescription)
+        }
+
+        // Cas 2 — dossier fixe inexistant : repli auprès de la vidéo.
+        do {
+            let c = makeCase("cas2", fixedMode: nil)   // « fixe » n'est jamais créé
+            let videoDir = c.src.deletingLastPathComponent()
+            let out = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
+                                                  outputDirectory: c.fixed)
+            check("2. dossier fixe inexistant → repli auprès de la vidéo",
+                  out.srt.deletingLastPathComponent().path == videoDir.path
+                  && exists(videoDir, "sujet.srt") && exists(videoDir, "sujet.txt"),
+                  out.srt.path)
+        } catch {
+            check("2. dossier fixe inexistant", false, error.localizedDescription)
+        }
+
+        // Cas 3 — dossier fixe présent mais NON inscriptible : repli, et le dossier
+        //         fixe doit rester rigoureusement vide (aucune écriture partielle).
+        do {
+            let c = makeCase("cas3", fixedMode: 0o500)
+            let videoDir = c.src.deletingLastPathComponent()
+            let out = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
+                                                  outputDirectory: c.fixed)
+            let fixedContents = (try? fm.contentsOfDirectory(atPath: c.fixed.path)) ?? []
+            check("3. dossier fixe non inscriptible → repli auprès de la vidéo",
+                  out.srt.deletingLastPathComponent().path == videoDir.path
+                  && exists(videoDir, "sujet.srt") && exists(videoDir, "sujet.txt"),
+                  out.srt.path)
+            check("3b. dossier fixe défaillant laissé vide",
+                  fixedContents.isEmpty, "contenu=\(fixedContents)")
+        } catch {
+            check("3. dossier fixe non inscriptible", false, error.localizedDescription)
+        }
+
+        // Cas 4 — le dossier de repli lui-même est non inscriptible : échec net,
+        //         aucun fichier nulle part.
+        do {
+            let c = makeCase("cas4", fixedMode: 0o500)
+            let videoDir = c.src.deletingLastPathComponent()
+            chmod(videoDir.path, 0o500)
+            defer { chmod(videoDir.path, 0o755) }
+            _ = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
+                                            outputDirectory: c.fixed)
+            check("4. repli non inscriptible → erreur attendue", false, "aucune erreur levée")
+        } catch {
+            let c4 = root.appendingPathComponent("cas4", isDirectory: true)
+            let videoDir = c4.appendingPathComponent("video", isDirectory: true)
+            let fixedDir = c4.appendingPathComponent("fixe", isDirectory: true)
+            let produced = ((try? fm.contentsOfDirectory(atPath: videoDir.path)) ?? [])
+                .filter { $0.hasSuffix(".srt") || $0.hasSuffix(".txt") }
+                + ((try? fm.contentsOfDirectory(atPath: fixedDir.path)) ?? [])
+            check("4. repli non inscriptible → erreur nette, aucun fichier produit",
+                  produced.isEmpty, "résidus=\(produced)")
+        }
+
+        // Cas 5 — anti-collision DANS le dossier de repli : « sujet.srt » y existe
+        //         déjà, le repli doit produire « sujet_2 ».
+        do {
+            let c = makeCase("cas5", fixedMode: 0o500)
+            let videoDir = c.src.deletingLastPathComponent()
+            fm.createFile(atPath: videoDir.appendingPathComponent("sujet.srt").path,
+                          contents: Data("occupé".utf8))
+            fm.createFile(atPath: videoDir.appendingPathComponent("sujet.txt").path,
+                          contents: Data("occupé".utf8))
+            let out = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
+                                                  outputDirectory: c.fixed)
+            let untouched = (try? String(contentsOf: videoDir.appendingPathComponent("sujet.srt"),
+                                         encoding: .utf8)) == "occupé"
+            check("5. anti-collision dans le dossier de repli → suffixe _2",
+                  out.srt.lastPathComponent == "sujet_2.srt"
+                  && out.txt.lastPathComponent == "sujet_2.txt" && untouched,
+                  out.srt.lastPathComponent)
+        } catch {
+            check("5. anti-collision dans le repli", false, error.localizedDescription)
+        }
+
+        // Cas 6 — cohérence SRT/TXT : seul « sujet.srt » préexiste. Le TXT ne doit
+        //         PAS prendre le nom libre « sujet.txt » : les deux restent appariés.
+        do {
+            let c = makeCase("cas6", fixedMode: 0o500)
+            let videoDir = c.src.deletingLastPathComponent()
+            fm.createFile(atPath: videoDir.appendingPathComponent("sujet.srt").path,
+                          contents: Data("occupé".utf8))
+            let out = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
+                                                  outputDirectory: c.fixed)
+            let sameBase = out.srt.deletingPathExtension().lastPathComponent
+                == out.txt.deletingPathExtension().lastPathComponent
+            check("6. SRT et TXT partagent toujours le même nom de base",
+                  sameBase && out.srt.lastPathComponent == "sujet_2.srt"
+                  && !exists(videoDir, "sujet.txt"),
+                  "\(out.srt.lastPathComponent) / \(out.txt.lastPathComponent)")
+        } catch {
+            check("6. cohérence SRT/TXT", false, error.localizedDescription)
+        }
+
+        print("[selftest] bilan BUG-007 : \(failures == 0 ? "6/6 OK" : "\(failures) échec(s)")")
+        return failures == 0 ? 0 : 5
+    }
+
+    /// Supprime une arborescence de test, y compris les dossiers rendus
+    /// volontairement non inscriptibles (droits restaurés au préalable).
+    private static func forceRemove(_ root: URL) {
+        let fm = FileManager.default
+        if let e = fm.enumerator(at: root, includingPropertiesForKeys: nil) {
+            for case let url as URL in e { chmod(url.path, 0o755) }
+        }
+        chmod(root.path, 0o755)
+        try? fm.removeItem(at: root)
     }
 
     // MARK: - Test de persistance des réglages
