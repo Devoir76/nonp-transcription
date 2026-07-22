@@ -92,7 +92,9 @@ enum SelfTest {
             TranscriptSegment(id: 2, startMs: 1500, endMs: 3000, text: "Second segment.")
         ]
         var failures = 0
+        var total = 0
         func check(_ label: String, _ ok: Bool, _ detail: String = "") {
+            total += 1
             if !ok { failures += 1 }
             print("[selftest] \(ok ? "OK  " : "ÉCHEC") — \(label)\(detail.isEmpty ? "" : " · \(detail)")")
         }
@@ -162,7 +164,7 @@ enum SelfTest {
         }
 
         // Cas 4 — le dossier de repli lui-même est non inscriptible : échec net,
-        //         aucun fichier nulle part.
+        //         aucun fichier nulle part, ET message désignant le BON dossier.
         do {
             let c = makeCase("cas4", fixedMode: 0o500)
             let videoDir = c.src.deletingLastPathComponent()
@@ -180,6 +182,44 @@ enum SelfTest {
                 + ((try? fm.contentsOfDirectory(atPath: fixedDir.path)) ?? [])
             check("4. repli non inscriptible → erreur nette, aucun fichier produit",
                   produced.isEmpty, "résidus=\(produced)")
+
+            // BUG-008 : le message doit nommer le dossier de la VIDÉO (seul dossier
+            // réellement tenté au moment de l'échec final) et JAMAIS le dossier fixe.
+            let msg = error.localizedDescription
+            check("4b. message → nomme le dossier réellement tenté (vidéo)",
+                  msg.contains(videoDir.path), msg.replacingOccurrences(of: "\n", with: " ⏎ "))
+            check("4c. message → ne mentionne PAS le dossier fixe non tenté",
+                  !msg.contains(fixedDir.path))
+            check("4d. message → structure attendue",
+                  msg.hasPrefix("Impossible d'écrire les fichiers de sortie dans :\n")
+                  && msg.contains("\nVérifiez que ce dossier est accessible en écriture.\n")
+                  && msg.contains("\nDétail technique : "))
+            check("4e. message → ne dit plus « le dossier de la vidéo »",
+                  !msg.contains("dossier de la vidéo"))
+        }
+
+        // Cas 7 — dossier de la vidéo directement non inscriptible (mode « à côté de
+        //         la vidéo », aucun dossier fixe) : le message doit le nommer, lui.
+        do {
+            let c = makeCase("cas7", fixedMode: nil)
+            let videoDir = c.src.deletingLastPathComponent()
+            chmod(videoDir.path, 0o500)
+            defer { chmod(videoDir.path, 0o755) }
+            _ = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
+                                            outputDirectory: nil)
+            check("7. dossier vidéo non inscriptible → erreur attendue", false,
+                  "aucune erreur levée")
+        } catch {
+            let videoDir = root.appendingPathComponent("cas7", isDirectory: true)
+                .appendingPathComponent("video", isDirectory: true)
+            let msg = error.localizedDescription
+            check("7. dossier vidéo non inscriptible → message nommant ce dossier",
+                  msg.contains(videoDir.path),
+                  msg.replacingOccurrences(of: "\n", with: " ⏎ "))
+            check("7b. détail technique présent (message Cocoa conservé)",
+                  msg.contains("Détail technique : ")
+                  && msg.split(separator: ":").last?.trimmingCharacters(
+                        in: .whitespacesAndNewlines).isEmpty == false)
         }
 
         // Cas 5 — anti-collision DANS le dossier de repli : « sujet.srt » y existe
@@ -222,7 +262,8 @@ enum SelfTest {
             check("6. cohérence SRT/TXT", false, error.localizedDescription)
         }
 
-        print("[selftest] bilan BUG-007 : \(failures == 0 ? "6/6 OK" : "\(failures) échec(s)")")
+        print("[selftest] bilan BUG-007 + BUG-008 : "
+            + (failures == 0 ? "\(total)/\(total) OK" : "\(failures)/\(total) échec(s)"))
         return failures == 0 ? 0 : 5
     }
 

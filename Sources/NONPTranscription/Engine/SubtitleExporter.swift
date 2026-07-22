@@ -12,13 +12,18 @@
 import Foundation
 
 enum SubtitleExportError: LocalizedError {
-    case writeFailed(String)
+    /// `directory` est le dossier dans lequel l'écriture a RÉELLEMENT été tentée —
+    /// jamais un dossier simplement envisagé. Le message ne doit orienter l'utilisateur
+    /// que vers un emplacement effectivement mis en cause (cf. BUG-008).
+    case writeFailed(directory: URL, detail: String)
 
     var errorDescription: String? {
         switch self {
-        case .writeFailed(let detail):
-            return "Impossible d'écrire les fichiers de sortie.\n\(detail)\n"
-                + "Vérifiez que le dossier de la vidéo est accessible en écriture."
+        case .writeFailed(let directory, let detail):
+            return "Impossible d'écrire les fichiers de sortie dans :\n"
+                + "\(directory.path)\n"
+                + "Vérifiez que ce dossier est accessible en écriture.\n"
+                + "Détail technique : \(detail)"
         }
     }
 }
@@ -50,36 +55,33 @@ enum SubtitleExporter {
         let srtContent = makeSRT(segments)
         let txtContent = makeTXT(segments)
 
-        // Le dossier demandé est-il le dossier de repli ? Alors il n'y a rien à
-        // tenter deux fois : un échec est un échec définitif.
+        // Le dossier demandé est-il déjà le dossier de repli ? Alors il n'y a qu'une
+        // seule destination possible : on ne la tente qu'une fois, à l'étape 2.
         let preferredIsFallback =
             preferred.standardizedFileURL.path == fallback.standardizedFileURL.path
 
-        // 1) Tentative dans le dossier demandé. On ne l'aborde que s'il est
-        //    inscriptible : inutile d'échouer pour le découvrir.
-        if isWritableDirectory(preferred) {
-            do {
-                return try writePair(srt: srtContent, txt: txtContent,
-                                     in: preferred, base: originalBase)
-            } catch {
-                // Course possible (volume démonté, disque plein…) : si le dossier
-                // demandé EST le repli, plus rien à tenter.
-                if preferredIsFallback {
-                    throw SubtitleExportError.writeFailed(error.localizedDescription)
-                }
+        // 1) Tentative dans le dossier demandé, s'il diffère du repli et qu'il est
+        //    inscriptible : inutile d'échouer pour le découvrir. Un échec ici n'est
+        //    jamais rapporté à l'utilisateur — il déclenche le repli, qui seul décide
+        //    du sort de l'export.
+        if !preferredIsFallback, isWritableDirectory(preferred) {
+            if let pair = try? writePair(srt: srtContent, txt: txtContent,
+                                         in: preferred, base: originalBase) {
+                return pair
             }
-        } else if preferredIsFallback {
-            // Le dossier de la vidéo lui-même est inaccessible : échec net.
-            throw SubtitleExportError.writeFailed(
-                "Le dossier « \(fallback.lastPathComponent) » n'est pas accessible en écriture.")
+            // Échec (course : volume démonté, disque plein…) → on se replie.
         }
 
-        // 2) Repli auprès de la vidéo, anti-collision recalculée sur place.
+        // 2) Écriture auprès de la vidéo — repli, ou tentative unique si c'était déjà
+        //    la destination demandée. Anti-collision recalculée sur place.
+        //    C'est le SEUL point de levée : l'erreur ne peut donc désigner qu'un
+        //    dossier dans lequel on a effectivement tenté d'écrire (BUG-008).
         do {
             return try writePair(srt: srtContent, txt: txtContent,
                                  in: fallback, base: originalBase)
         } catch {
-            throw SubtitleExportError.writeFailed(error.localizedDescription)
+            throw SubtitleExportError.writeFailed(directory: fallback,
+                                                  detail: error.localizedDescription)
         }
     }
 
