@@ -30,8 +30,21 @@ struct ContentView: View {
     }
 
     /// Conditions réunies pour pouvoir transcrire (fichier + modèle + outils).
+    /// Bloqué si le modèle courant est en échec d'intégrité ou en cours de vérif :
+    /// on ne transcrit jamais avec un modèle dont l'empreinte n'est pas confirmée.
     private var readyToTranscribe: Bool {
         state.canTranscribe && modelInstalled && state.toolsError == nil
+            && !modelIntegrityBlocked
+    }
+
+    /// Vrai si le téléchargeur signale un échec d'intégrité (ou vérifie) le modèle
+    /// actuellement requis.
+    private var modelIntegrityBlocked: Bool {
+        guard downloader.model?.id == currentModel.id else { return false }
+        switch downloader.phase {
+        case .failed, .verifying: return true
+        default:                  return false
+        }
     }
 
     var body: some View {

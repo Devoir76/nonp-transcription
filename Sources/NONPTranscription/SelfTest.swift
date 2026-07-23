@@ -325,7 +325,35 @@ enum SelfTest {
                   MediaDurationProbe.parseFFmpegDuration("Duration: 01:02:03.00, bitrate: 1 kb/s") == 3723.0)
         let durCode = dur.report("durée MKV/AVI (parsing)")
 
-        return (failures == 0 && vttCode == 0 && durCode == 0) ? 0 : 5
+        // Intégrité modèles — hacheur (KAT), manifeste, et décision de conformité.
+        // Hermétique : n'utilise QUE de petits fichiers synthétiques, jamais un modèle.
+        let integ = Checker()
+        let emptyURL = root.appendingPathComponent("vide.bin")
+        fm.createFile(atPath: emptyURL.path, contents: Data())
+        let abcURL = root.appendingPathComponent("abc.bin")
+        fm.createFile(atPath: abcURL.path, contents: Data("abc".utf8))
+
+        let emptyHash = (try? await FileHasher.sha256Hex(of: emptyURL)) ?? "?"
+        // blockSize: 1 force plusieurs blocs → prouve l'assemblage incrémental.
+        let abcHash = (try? await FileHasher.sha256Hex(of: abcURL, blockSize: 1)) ?? "?"
+
+        let emptyKAT = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        integ.check("M1. SHA-256 fichier vide == vecteur standard", emptyHash == emptyKAT)
+        integ.check("M2. SHA-256 « abc » (multi-blocs) == vecteur standard",
+                    abcHash == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
+        integ.check("M3. manifeste large-v3 (empreinte codée)",
+                    WhisperModel.largeV3.sha256
+                      == "64d182b440b98d5203c4f9bd541544d84c605196c4f7b845dfa11fb23594d1e2")
+        integ.check("M4. manifeste large-v3-turbo (empreinte codée)",
+                    WhisperModel.largeV3Turbo.sha256
+                      == "1fc70f774d38eb169993ac391eea357ef47c88757ef72ee5943879b7e8e2bc69")
+        // Décision de conformité : même comparaison que runIntegrityCheck (digest == référence).
+        integ.check("M5. décision → conforme (référence correcte)", emptyHash == emptyKAT)
+        integ.check("M6. décision → non conforme (référence fausse)",
+                    !(emptyHash == "0000000000000000000000000000000000000000000000000000000000000000"))
+        let integCode = integ.report("intégrité modèles")
+
+        return (failures == 0 && vttCode == 0 && durCode == 0 && integCode == 0) ? 0 : 5
     }
 
     /// Supprime une arborescence de test, y compris les dossiers rendus

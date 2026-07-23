@@ -109,7 +109,8 @@ extension ModelDownloader: URLSessionDownloadDelegate {
                 self.phase = .failed("Enregistrement impossible : \(moveError)")
                 return
             }
-            self.verifyAndFinish()
+            // Gate d'intégrité : un téléchargement non conforme EST supprimé.
+            self.runIntegrityCheck(removeOnMismatch: true)
         }
     }
 
@@ -127,16 +128,43 @@ extension ModelDownloader: URLSessionDownloadDelegate {
         }
     }
 
-    /// Vérifie la taille du fichier téléchargé et conclut.
-    private func verifyAndFinish() {
+    /// Vérifie l'intégrité du modèle DÉJÀ installé à la demande (bouton
+    /// « Vérifier maintenant »). Non destructif : sur écart, on NE supprime PAS
+    /// le fichier de l'utilisateur — on signale « non conforme » (la transcription
+    /// est bloquée en amont tant que l'état reste .failed).
+    func verifyInstalled(_ model: WhisperModel) {
+        guard phase != .downloading, phase != .verifying else { return }
+        self.model = model
+        runIntegrityCheck(removeOnMismatch: false)
+    }
+
+    /// Cœur de la vérification : taille D'ABORD (rapide, rejette un tronqué), PUIS
+    /// SHA-256 comparé à la référence. Concordance → .done ; écart → .failed (et
+    /// suppression du fichier seulement si `removeOnMismatch`). Le SHA ne tourne
+    /// donc que sur un fichier dont la taille est déjà exacte.
+    private func runIntegrityCheck(removeOnMismatch: Bool) {
         phase = .verifying
         guard let model else { phase = .idle; return }
-        if ModelStore.isInstalled(model) {
-            phase = .done
-        } else {
-            // Taille inattendue → fichier corrompu/incomplet : on le supprime.
-            try? FileManager.default.removeItem(at: ModelStore.localURL(for: model))
-            phase = .failed("Fichier téléchargé incomplet ou corrompu. Réessayez.")
+        let url = ModelStore.localURL(for: model)
+
+        guard ModelStore.isInstalled(model) else {
+            if removeOnMismatch { try? FileManager.default.removeItem(at: url) }
+            phase = .failed("Fichier incomplet ou de taille inattendue. Re-téléchargez le modèle.")
+            return
+        }
+        let expected = model.sha256
+        Task { @MainActor in
+            do {
+                let digest = try await FileHasher.sha256Hex(of: url)
+                if digest == expected {
+                    phase = .done
+                } else {
+                    if removeOnMismatch { try? FileManager.default.removeItem(at: url) }
+                    phase = .failed("Empreinte non conforme — fichier corrompu. Re-téléchargez le modèle.")
+                }
+            } catch {
+                phase = .failed("Vérification impossible : \(error.localizedDescription)")
+            }
         }
     }
 }
