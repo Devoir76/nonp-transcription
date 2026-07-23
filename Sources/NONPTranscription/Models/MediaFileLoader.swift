@@ -1,10 +1,11 @@
 // MediaFileLoader.swift — lecture des métadonnées d'un fichier (taille + durée).
 //
 // Séparé de MediaFile pour garder le modèle « pur ». La lecture de durée passe
-// par AVFoundation (framework système, natif Apple Silicon), qui gère MP4, MOV,
-// M4A, MP3, WAV. Pour MKV/AVI, AVFoundation peut échouer : la durée restera
-// `nil` et sera résolue plus tard via ffmpeg (Étape 2). C'est volontaire et sans
-// gravité — l'app reste fidèle à une montée en puissance étape par étape.
+// d'abord par AVFoundation (framework système, natif Apple Silicon), qui gère
+// MP4, MOV, M4A, MP3, WAV. Pour les conteneurs qu'AVFoundation ne sait pas lire
+// (MKV, AVI), un REPLI lit la durée via le ffmpeg embarqué (MediaDurationProbe).
+// Le repli ne se déclenche que si AVFoundation n'a rien renvoyé : le chemin natif
+// rapide est préservé pour tous les formats déjà pris en charge.
 
 import Foundation
 import AVFoundation
@@ -27,6 +28,14 @@ enum MediaFileLoader {
             if seconds.isFinite && seconds > 0 {
                 duration = seconds
             }
+        }
+
+        // Repli best-effort : AVFoundation échoue sur MKV/AVI → durée via le ffmpeg
+        // DÉJÀ embarqué (lecture d'entête, sans décodage). Le chemin nominal
+        // (MP4/MOV/MP3/M4A/WAV) n'est JAMAIS concerné : le repli ne se déclenche
+        // que si AVFoundation n'a rien renvoyé. Ne lève jamais : nil si indisponible.
+        if duration == nil, let tools = try? EmbeddedTools.locate() {
+            duration = await MediaDurationProbe.probeDuration(of: url, ffmpeg: tools.ffmpeg)
         }
 
         return MediaFile(url: url, sizeBytes: size, duration: duration)

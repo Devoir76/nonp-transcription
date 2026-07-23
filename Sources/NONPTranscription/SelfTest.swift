@@ -310,7 +310,22 @@ enum SelfTest {
         }
         let vttCode = vtt.report("format VTT (Phase 2)")
 
-        return (failures == 0 && vttCode == 0) ? 0 : 5
+        // Durée MKV/AVI (parsing) — teste la fonction PURE parseFFmpegDuration sur
+        // des chaînes fixes. Aucun sous-processus, aucun fichier. Bilan SÉPARÉ.
+        let dur = Checker()
+        let d1 = MediaDurationProbe.parseFFmpegDuration(
+            "  Duration: 00:00:03.51, start: 0.000000, bitrate: 77 kb/s")
+        dur.check("D1. « 00:00:03.51 » → ~3.51",
+                  d1.map { abs($0 - 3.51) < 0.02 } == true, String(describing: d1))
+        dur.check("D2. « Duration: N/A » → nil",
+                  MediaDurationProbe.parseFFmpegDuration("  Duration: N/A, start: 0") == nil)
+        dur.check("D3. chaîne sans « Duration: » → nil",
+                  MediaDurationProbe.parseFFmpegDuration("Stream #0:0: Audio: pcm_s16le") == nil)
+        dur.check("D4. « 01:02:03.00 » → 3723.0",
+                  MediaDurationProbe.parseFFmpegDuration("Duration: 01:02:03.00, bitrate: 1 kb/s") == 3723.0)
+        let durCode = dur.report("durée MKV/AVI (parsing)")
+
+        return (failures == 0 && vttCode == 0 && durCode == 0) ? 0 : 5
     }
 
     /// Supprime une arborescence de test, y compris les dossiers rendus
