@@ -7,8 +7,7 @@ import SwiftUI
 
 struct TranscriptionDoneView: View {
     let directory: URL
-    let srt: URL
-    let txt: URL
+    let outputs: [ExportedOutput]
     let onNewFile: () -> Void
 
     var body: some View {
@@ -20,10 +19,11 @@ struct TranscriptionDoneView: View {
             Text("Transcription terminée")
                 .font(.title3.weight(.semibold))
 
-            // Rappel des deux fichiers produits
+            // Rappel des fichiers produits (un par format choisi)
             VStack(alignment: .leading, spacing: 4) {
-                Label(srt.lastPathComponent, systemImage: "doc.text")
-                Label(txt.lastPathComponent, systemImage: "doc.plaintext")
+                ForEach(outputs, id: \.url) { out in
+                    Label(out.url.lastPathComponent, systemImage: out.format.icon)
+                }
             }
             .font(.callout)
             .foregroundStyle(.secondary)
@@ -34,7 +34,7 @@ struct TranscriptionDoneView: View {
             HStack(spacing: 12) {
                 Button {
                     // Ré-ouvre le dossier avec les fichiers sélectionnés.
-                    NSWorkspace.shared.activateFileViewerSelecting([srt, txt])
+                    NSWorkspace.shared.activateFileViewerSelecting(outputs.urls)
                 } label: {
                     Label("Ouvrir le dossier", systemImage: "folder")
                         .frame(maxWidth: .infinity)

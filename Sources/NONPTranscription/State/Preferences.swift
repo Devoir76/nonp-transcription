@@ -73,6 +73,20 @@ final class Preferences: ObservableObject {
         }
     }
 
+    /// Formats de sortie choisis. Défaut {SRT, TXT} = comportement V1.
+    /// Stocké en UserDefaults comme tableau de rawValue (un Set n'y va pas
+    /// directement) ; relu vers un Set, jamais vide (repli sur le défaut).
+    @Published var selectedFormats: Set<OutputFormat> {
+        didSet {
+            defaults.set(selectedFormats.map(\.rawValue).sorted(),
+                         forKey: Keys.selectedFormats)
+            trace(Keys.selectedFormats,
+                  wrote: Self.canonical(selectedFormats),
+                  reread: defaults.stringArray(forKey: Keys.selectedFormats)
+                            .map { Self.canonical(Set($0.compactMap(OutputFormat.init))) })
+        }
+    }
+
     // MARK: - Stockage
 
     private let defaults: UserDefaults
@@ -80,6 +94,7 @@ final class Preferences: ObservableObject {
         static let outputMode = "outputMode"
         static let customFolderPath = "customFolderPath"
         static let openFolderWhenDone = "openFolderWhenDone"
+        static let selectedFormats = "selectedFormats"
     }
 
     /// `defaults` est injectable UNIQUEMENT pour les tests (domaine isolé).
@@ -92,6 +107,11 @@ final class Preferences: ObservableObject {
         customFolderPath = defaults.string(forKey: Keys.customFolderPath) ?? ""
         // Par défaut : on ouvre le dossier à la fin (comportement attendu).
         openFolderWhenDone = (defaults.object(forKey: Keys.openFolderWhenDone) as? Bool) ?? true
+        // Formats : relus depuis le tableau de rawValue ; repli sur le défaut sûr
+        // {SRT, TXT} si absent OU corrompu (jamais un ensemble vide).
+        let savedFormats = defaults.stringArray(forKey: Keys.selectedFormats)
+            .map { Set($0.compactMap(OutputFormat.init)) }
+        selectedFormats = (savedFormats?.isEmpty == false) ? savedFormats! : OutputFormat.defaultSet
         traceLoad()
     }
 
@@ -106,6 +126,12 @@ final class Preferences: ObservableObject {
             valeur=\(wrote, privacy: .public) \
             relecture=\(verdict, privacy: .public)
             """)
+    }
+
+    /// Représentation canonique et stable d'un ensemble de formats (pour la trace
+    /// et la comparaison écriture/relecture) : rawValues triées, jointes par « + ».
+    private static func canonical(_ formats: Set<OutputFormat>) -> String {
+        formats.map(\.rawValue).sorted().joined(separator: "+")
     }
 
     /// Idem, pour une valeur SENSIBLE : empreinte en public, brut en privé.
@@ -126,13 +152,22 @@ final class Preferences: ObservableObject {
             defaults.object(forKey: key) == nil ? "absente" : "présente"
         }
         let m = state(Keys.outputMode), p = state(Keys.customFolderPath)
-        let o = state(Keys.openFolderWhenDone)
+        let o = state(Keys.openFolderWhenDone), f = state(Keys.selectedFormats)
         prefsLog.notice("""
             chargement \
             outputMode=\(m, privacy: .public)/\(self.outputMode.rawValue, privacy: .public) \
             customFolderPath=\(p, privacy: .public)/\(fingerprint(self.customFolderPath), privacy: .public) \
-            openFolderWhenDone=\(o, privacy: .public)/\(String(self.openFolderWhenDone), privacy: .public)
+            openFolderWhenDone=\(o, privacy: .public)/\(String(self.openFolderWhenDone), privacy: .public) \
+            selectedFormats=\(f, privacy: .public)/\(Self.canonical(self.selectedFormats), privacy: .public)
             """)
+    }
+
+    // MARK: - Formats de sortie
+
+    /// Formats choisis dans l'ordre canonique (celui d'`allCases`), pour l'export.
+    /// L'ordre est indépendant de l'ordre de stockage dans UserDefaults.
+    var orderedSelectedFormats: [OutputFormat] {
+        OutputFormat.allCases.filter { selectedFormats.contains($0) }
     }
 
     // MARK: - Dossier de sortie

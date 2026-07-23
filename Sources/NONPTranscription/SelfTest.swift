@@ -130,11 +130,11 @@ enum SelfTest {
         do {
             let c = makeCase("cas1", fixedMode: 0o755)
             let out = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
-                                                  outputDirectory: c.fixed)
+                                                  formats: [.srt, .txt], outputDirectory: c.fixed)
             check("1. dossier fixe accessible → écrit dans le dossier fixe",
-                  out.srt.deletingLastPathComponent().path == c.fixed.path
+                  out.url(for: .srt)!.deletingLastPathComponent().path == c.fixed.path
                   && exists(c.fixed, "sujet.srt") && exists(c.fixed, "sujet.txt"),
-                  out.srt.path)
+                  out.url(for: .srt)!.path)
         } catch {
             check("1. dossier fixe accessible", false, error.localizedDescription)
         }
@@ -144,11 +144,11 @@ enum SelfTest {
             let c = makeCase("cas2", fixedMode: nil)   // « fixe » n'est jamais créé
             let videoDir = c.src.deletingLastPathComponent()
             let out = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
-                                                  outputDirectory: c.fixed)
+                                                  formats: [.srt, .txt], outputDirectory: c.fixed)
             check("2. dossier fixe inexistant → repli auprès de la vidéo",
-                  out.srt.deletingLastPathComponent().path == videoDir.path
+                  out.url(for: .srt)!.deletingLastPathComponent().path == videoDir.path
                   && exists(videoDir, "sujet.srt") && exists(videoDir, "sujet.txt"),
-                  out.srt.path)
+                  out.url(for: .srt)!.path)
         } catch {
             check("2. dossier fixe inexistant", false, error.localizedDescription)
         }
@@ -159,12 +159,12 @@ enum SelfTest {
             let c = makeCase("cas3", fixedMode: 0o500)
             let videoDir = c.src.deletingLastPathComponent()
             let out = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
-                                                  outputDirectory: c.fixed)
+                                                  formats: [.srt, .txt], outputDirectory: c.fixed)
             let fixedContents = (try? fm.contentsOfDirectory(atPath: c.fixed.path)) ?? []
             check("3. dossier fixe non inscriptible → repli auprès de la vidéo",
-                  out.srt.deletingLastPathComponent().path == videoDir.path
+                  out.url(for: .srt)!.deletingLastPathComponent().path == videoDir.path
                   && exists(videoDir, "sujet.srt") && exists(videoDir, "sujet.txt"),
-                  out.srt.path)
+                  out.url(for: .srt)!.path)
             check("3b. dossier fixe défaillant laissé vide",
                   fixedContents.isEmpty, "contenu=\(fixedContents)")
         } catch {
@@ -179,7 +179,7 @@ enum SelfTest {
             chmod(videoDir.path, 0o500)
             defer { chmod(videoDir.path, 0o755) }
             _ = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
-                                            outputDirectory: c.fixed)
+                                            formats: [.srt, .txt], outputDirectory: c.fixed)
             check("4. repli non inscriptible → erreur attendue", false, "aucune erreur levée")
         } catch {
             let c4 = root.appendingPathComponent("cas4", isDirectory: true)
@@ -214,7 +214,7 @@ enum SelfTest {
             chmod(videoDir.path, 0o500)
             defer { chmod(videoDir.path, 0o755) }
             _ = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
-                                            outputDirectory: nil)
+                                            formats: [.srt, .txt], outputDirectory: nil)
             check("7. dossier vidéo non inscriptible → erreur attendue", false,
                   "aucune erreur levée")
         } catch {
@@ -240,13 +240,13 @@ enum SelfTest {
             fm.createFile(atPath: videoDir.appendingPathComponent("sujet.txt").path,
                           contents: Data("occupé".utf8))
             let out = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
-                                                  outputDirectory: c.fixed)
+                                                  formats: [.srt, .txt], outputDirectory: c.fixed)
             let untouched = (try? String(contentsOf: videoDir.appendingPathComponent("sujet.srt"),
                                          encoding: .utf8)) == "occupé"
             check("5. anti-collision dans le dossier de repli → suffixe _2",
-                  out.srt.lastPathComponent == "sujet_2.srt"
-                  && out.txt.lastPathComponent == "sujet_2.txt" && untouched,
-                  out.srt.lastPathComponent)
+                  out.url(for: .srt)!.lastPathComponent == "sujet_2.srt"
+                  && out.url(for: .txt)!.lastPathComponent == "sujet_2.txt" && untouched,
+                  out.url(for: .srt)!.lastPathComponent)
         } catch {
             check("5. anti-collision dans le repli", false, error.localizedDescription)
         }
@@ -259,13 +259,13 @@ enum SelfTest {
             fm.createFile(atPath: videoDir.appendingPathComponent("sujet.srt").path,
                           contents: Data("occupé".utf8))
             let out = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
-                                                  outputDirectory: c.fixed)
-            let sameBase = out.srt.deletingPathExtension().lastPathComponent
-                == out.txt.deletingPathExtension().lastPathComponent
+                                                  formats: [.srt, .txt], outputDirectory: c.fixed)
+            let sameBase = out.url(for: .srt)!.deletingPathExtension().lastPathComponent
+                == out.url(for: .txt)!.deletingPathExtension().lastPathComponent
             check("6. SRT et TXT partagent toujours le même nom de base",
-                  sameBase && out.srt.lastPathComponent == "sujet_2.srt"
+                  sameBase && out.url(for: .srt)!.lastPathComponent == "sujet_2.srt"
                   && !exists(videoDir, "sujet.txt"),
-                  "\(out.srt.lastPathComponent) / \(out.txt.lastPathComponent)")
+                  "\(out.url(for: .srt)!.lastPathComponent) / \(out.url(for: .txt)!.lastPathComponent)")
         } catch {
             check("6. cohérence SRT/TXT", false, error.localizedDescription)
         }
@@ -298,6 +298,9 @@ enum SelfTest {
     private static let probeMode: Preferences.OutputMode = .customFolder
     private static let probePath = "/tmp/nonp-selftest-crossprocess"
     private static let probeOpen = false
+    /// Témoin de formats : volontairement un SEUL format (≠ défaut {SRT,TXT}),
+    /// pour prouver qu'un choix restreint survit au changement de process.
+    private static let probeFormats: Set<OutputFormat> = [.srt]
 
     /// Petit compteur d'assertions, commun aux blocs de persistance.
     private final class Checker {
@@ -318,7 +321,7 @@ enum SelfTest {
     /// Snapshot des trois clés du domaine RÉEL, pour prouver qu'aucun test de
     /// persistance ne l'altère.
     private static func standardSnapshot() -> String {
-        ["outputMode", "customFolderPath", "openFolderWhenDone"]
+        ["outputMode", "customFolderPath", "openFolderWhenDone", "selectedFormats"]
             .map { "\($0)=\(String(describing: UserDefaults.standard.object(forKey: $0)))" }
             .joined(separator: " ")
     }
@@ -341,7 +344,7 @@ enum SelfTest {
             // Valeurs d'origine dans la suite, à restaurer en fin de test.
             let origin = Preferences(defaults: suite)
             let o0 = origin.outputMode, o1 = origin.customFolderPath
-            let o2 = origin.openFolderWhenDone
+            let o2 = origin.openFolderWhenDone, o3 = origin.selectedFormats
 
             let a = Preferences(defaults: suite)
 
@@ -373,6 +376,19 @@ enum SelfTest {
             k.check("3c. openFolderWhenDone=true écrit → relu true",
                     Preferences(defaults: suite).openFolderWhenDone == true)
 
+            // 3d — selectedFormats : choix restreint {SRT} relu à l'identique,
+            //       puis retour au couple {SRT,TXT}.
+            a.selectedFormats = [.srt]
+            k.check("3d. selectedFormats={SRT} écrit → relu à l'identique",
+                    Preferences(defaults: suite).selectedFormats == [.srt])
+            a.selectedFormats = [.srt, .txt]
+            k.check("3e. selectedFormats={SRT,TXT} écrit → relu à l'identique",
+                    Preferences(defaults: suite).selectedFormats == [.srt, .txt])
+            // 3f — repli sur le défaut si la clé stockée est corrompue (jamais vide).
+            suite.set(["xxx", "zzz"], forKey: "selectedFormats")
+            k.check("3f. selectedFormats corrompu → repli sur défaut {SRT,TXT}",
+                    Preferences(defaults: suite).selectedFormats == OutputFormat.defaultSet)
+
             // 4 — indépendance des clés (constat du cycle 5 de la campagne 19/07).
             a.customFolderPath = probe
             a.outputMode = .customFolder
@@ -388,10 +404,11 @@ enum SelfTest {
             // 5 — restauration des valeurs d'origine, puis vérification.
             let r = Preferences(defaults: suite)
             r.outputMode = o0; r.customFolderPath = o1; r.openFolderWhenDone = o2
+            r.selectedFormats = o3
             let back = Preferences(defaults: suite)
             k.check("5. valeurs d'origine restaurées",
                     back.outputMode == o0 && back.customFolderPath == o1
-                    && back.openFolderWhenDone == o2)
+                    && back.openFolderWhenDone == o2 && back.selectedFormats == o3)
         }
 
         // 5b — contrôle réel : le domaine de l'utilisateur n'a pas bougé.
@@ -418,9 +435,11 @@ enum SelfTest {
             p.outputMode = probeMode
             p.customFolderPath = probePath
             p.openFolderWhenDone = probeOpen
+            p.selectedFormats = probeFormats
             k.check("W1. outputMode écrit en mémoire", p.outputMode == probeMode)
             k.check("W2. customFolderPath écrit en mémoire", p.customFolderPath == probePath)
             k.check("W3. openFolderWhenDone écrit en mémoire", p.openFolderWhenDone == probeOpen)
+            k.check("W5. selectedFormats écrit en mémoire", p.selectedFormats == probeFormats)
         }
 
         let after = standardSnapshot()
@@ -451,6 +470,9 @@ enum SelfTest {
                     String(p.openFolderWhenDone))
             k.check("R4. openFolderWhenDone=false présent EXPLICITEMENT",
                     suite.object(forKey: "openFolderWhenDone") != nil)
+            k.check("R6. selectedFormats a survécu au changement de process",
+                    p.selectedFormats == probeFormats,
+                    p.selectedFormats.map(\.rawValue).sorted().joined(separator: "+"))
         }
 
         let after = standardSnapshot()
@@ -520,8 +542,9 @@ enum SelfTest {
             if let outputDirectory {
                 print("[selftest] dossier de sortie : \(outputDirectory.path)")
             }
-            let (srt, txt) = try SubtitleExporter.export(
-                segments: segments, sourceURL: input, outputDirectory: outputDirectory
+            let outputs = try SubtitleExporter.export(
+                segments: segments, sourceURL: input,
+                formats: [.srt, .txt], outputDirectory: outputDirectory
             )
 
             // 4) Nettoyage du temporaire
@@ -529,8 +552,9 @@ enum SelfTest {
 
             // Rapport
             print("[selftest] segments : \(segments.count)")
-            print("[selftest] SRT : \(srt.path)")
-            print("[selftest] TXT : \(txt.path)")
+            for out in outputs {
+                print("[selftest] \(out.format.rawValue.uppercased()) : \(out.url.path)")
+            }
             print("[selftest] wav nettoyé : \(!exists(wav))")
 
             // Vérifie que la source n'a pas changé.
@@ -540,7 +564,7 @@ enum SelfTest {
 
             // Ouverture automatique du dossier (même appel que le coordinateur).
             if reveal {
-                NSWorkspace.shared.activateFileViewerSelecting([srt, txt])
+                NSWorkspace.shared.activateFileViewerSelecting(outputs.urls)
                 print("[selftest] ouverture du dossier demandée (Finder)")
             }
 

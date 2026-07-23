@@ -70,9 +70,9 @@ struct ContentView: View {
         case .preparing, .transcribing, .exporting:
             TranscriptionProgressView(coordinator: coordinator)
 
-        case .finished(let directory, let srt, let txt):
+        case .finished(let directory, let outputs):
             TranscriptionDoneView(
-                directory: directory, srt: srt, txt: txt,
+                directory: directory, outputs: outputs,
                 onNewFile: {
                     coordinator.reset()
                     state.clearFile()
@@ -221,6 +221,7 @@ struct ContentView: View {
                 quality: state.quality,
                 tools: tools,
                 outputDirectory: preferences.outputDirectory(for: file.url),
+                formats: preferences.orderedSelectedFormats,
                 openWhenDone: preferences.openFolderWhenDone
             )
         } label: {

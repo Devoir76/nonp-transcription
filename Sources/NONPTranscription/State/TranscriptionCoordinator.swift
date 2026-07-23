@@ -21,8 +21,8 @@ final class TranscriptionCoordinator: ObservableObject {
         case idle
         case preparing                          // extraction audio (indéterminé)
         case transcribing(fraction: Double)     // transcription (0…1)
-        case exporting                          // écriture SRT/TXT
-        case finished(directory: URL, srt: URL, txt: URL)
+        case exporting                          // écriture des fichiers de sortie
+        case finished(directory: URL, outputs: [ExportedOutput])
         case failed(String)
         case cancelled
     }
@@ -60,6 +60,7 @@ final class TranscriptionCoordinator: ObservableObject {
         quality: QualityPreset,
         tools: EmbeddedTools,
         outputDirectory: URL,
+        formats: [OutputFormat],
         openWhenDone: Bool
     ) {
         guard !isRunning else { return }
@@ -82,6 +83,7 @@ final class TranscriptionCoordinator: ObservableObject {
                 modelPath: modelPath,
                 tools: tools,
                 outputDirectory: outputDirectory,
+                formats: formats,
                 openWhenDone: openWhenDone
             )
         }
@@ -110,6 +112,7 @@ final class TranscriptionCoordinator: ObservableObject {
         modelPath: URL,
         tools: EmbeddedTools,
         outputDirectory: URL,
+        formats: [OutputFormat],
         openWhenDone: Bool
     ) async {
         let extractor = FFmpegAudioExtractor(ffmpeg: tools.ffmpeg)
@@ -140,22 +143,28 @@ final class TranscriptionCoordinator: ObservableObject {
             //    L'exportateur se replie auprès de la vidéo si ce dossier est
             //    devenu inaccessible : les URL renvoyées font foi.
             phase = .exporting
-            let (srt, txt) = try SubtitleExporter.export(
+            let outputs = try SubtitleExporter.export(
                 segments: segments, sourceURL: sourceURL,
-                outputDirectory: outputDirectory
+                formats: formats, outputDirectory: outputDirectory
             )
 
             // 4) Nettoyage du temporaire + fin
             removeTemporary(temporaryWAV)
             stopClock()
             // Dossier RÉELLEMENT utilisé, et non celui demandé : après un repli,
-            // les deux diffèrent.
-            phase = .finished(directory: srt.deletingLastPathComponent(),
-                              srt: srt, txt: txt)
+            // les deux diffèrent. Toutes les sorties partagent ce dossier ; on le
+            // dérive de la première sans force-unwrap (≥1 garanti par la précondition
+            // de l'export, mais on échoue proprement si l'invariant était rompu).
+            guard let first = outputs.first else {
+                phase = .failed("Aucun fichier de sortie n'a été produit.")
+                return
+            }
+            phase = .finished(directory: first.url.deletingLastPathComponent(),
+                              outputs: outputs)
 
             // 5) Ouverture automatique du dossier de sortie (si le réglage l'autorise)
             if openWhenDone {
-                NSWorkspace.shared.activateFileViewerSelecting([srt, txt])
+                NSWorkspace.shared.activateFileViewerSelecting(outputs.urls)
             }
 
         } catch {

@@ -16,6 +16,9 @@ enum SubtitleExportError: LocalizedError {
     /// jamais un dossier simplement envisagé. Le message ne doit orienter l'utilisateur
     /// que vers un emplacement effectivement mis en cause (cf. BUG-008).
     case writeFailed(directory: URL, detail: String)
+    /// Aucun format de sortie demandé — l'appelant doit toujours en fournir au
+    /// moins un (l'UI garantit ce contrat via son garde-fou). Cf. ADR-0002.
+    case noFormatsRequested
 
     var errorDescription: String? {
         switch self {
@@ -24,12 +27,14 @@ enum SubtitleExportError: LocalizedError {
                 + "\(directory.path)\n"
                 + "Vérifiez que ce dossier est accessible en écriture.\n"
                 + "Détail technique : \(detail)"
+        case .noFormatsRequested:
+            return "Aucun format de sortie sélectionné : rien à écrire."
         }
     }
 }
 
 enum SubtitleExporter {
-    /// Écrit `<source>.srt` et `<source>.txt`.
+    /// Écrit `<source>.<ext>` pour chacun des `formats` demandés.
     /// Par défaut dans le dossier du fichier source ; si `outputDirectory` est
     /// fourni, les fichiers y sont écrits (le nom reste celui de la source).
     ///
@@ -39,12 +44,17 @@ enum SubtitleExporter {
     /// inaccessible ne doit pas la jeter. L'anti-collision est entièrement
     /// recalculée dans le dossier de repli.
     ///
-    /// Renvoie les URL des deux fichiers réellement créés — l'appelant ne doit
-    /// donc jamais supposer qu'ils se trouvent dans `outputDirectory`.
+    /// Renvoie les sorties réellement créées (format + URL), dans l'ordre des
+    /// `formats` fournis — l'appelant ne doit donc jamais supposer qu'elles se
+    /// trouvent dans `outputDirectory`.
     @discardableResult
     static func export(segments: [TranscriptSegment], sourceURL: URL,
-                       outputDirectory: URL? = nil) throws
-        -> (srt: URL, txt: URL) {
+                       formats: [OutputFormat], outputDirectory: URL? = nil) throws
+        -> [ExportedOutput] {
+
+        // Précondition : au moins un format. L'UI le garantit (garde-fou), mais
+        // l'export refuse explicitement un appel vide plutôt que de ne rien produire.
+        guard !formats.isEmpty else { throw SubtitleExportError.noFormatsRequested }
 
         // Dossier de repli : toujours celui de la vidéo.
         let fallback = sourceURL.deletingLastPathComponent()
@@ -52,8 +62,9 @@ enum SubtitleExporter {
         let preferred = outputDirectory ?? fallback
         let originalBase = sourceURL.deletingPathExtension().lastPathComponent
 
-        let srtContent = makeSRT(segments)
-        let txtContent = makeTXT(segments)
+        // Contenus pré-générés (fonctions PURES des segments) + extensions concernées.
+        let contents = formats.map { (format: $0, text: makeContent($0, segments)) }
+        let extensions = formats.map(\.fileExtension)
 
         // Le dossier demandé est-il déjà le dossier de repli ? Alors il n'y a qu'une
         // seule destination possible : on ne la tente qu'une fois, à l'étape 2.
@@ -65,9 +76,9 @@ enum SubtitleExporter {
         //    jamais rapporté à l'utilisateur — il déclenche le repli, qui seul décide
         //    du sort de l'export.
         if !preferredIsFallback, isWritableDirectory(preferred) {
-            if let pair = try? writePair(srt: srtContent, txt: txtContent,
-                                         in: preferred, base: originalBase) {
-                return pair
+            if let out = try? writeAll(contents, in: preferred,
+                                       base: originalBase, extensions: extensions) {
+                return out
             }
             // Échec (course : volume démonté, disque plein…) → on se replie.
         }
@@ -77,39 +88,45 @@ enum SubtitleExporter {
         //    C'est le SEUL point de levée : l'erreur ne peut donc désigner qu'un
         //    dossier dans lequel on a effectivement tenté d'écrire (BUG-008).
         do {
-            return try writePair(srt: srtContent, txt: txtContent,
-                                 in: fallback, base: originalBase)
+            return try writeAll(contents, in: fallback,
+                                base: originalBase, extensions: extensions)
         } catch {
             throw SubtitleExportError.writeFailed(directory: fallback,
                                                   detail: error.localizedDescription)
         }
     }
 
-    /// Écrit le couple SRT/TXT dans `directory` sous un nom de base disponible.
-    /// Garantie de non-écriture partielle : si le second fichier échoue, le premier
-    /// est retiré, afin de ne jamais laisser un SRT orphelin dans un dossier où le
-    /// repli va de toute façon produire le couple complet.
-    private static func writePair(srt srtContent: String, txt txtContent: String,
-                                  in directory: URL, base: String) throws
-        -> (srt: URL, txt: URL) {
+    /// Écrit tous les formats dans `directory` sous un nom de base disponible.
+    /// Garantie de non-écriture partielle : si l'une des écritures échoue, TOUS
+    /// les fichiers déjà écrits ce tour-ci sont retirés, afin de ne jamais laisser
+    /// une sortie orpheline dans un dossier où le repli va de toute façon produire
+    /// l'ensemble complet.
+    private static func writeAll(_ contents: [(format: OutputFormat, text: String)],
+                                 in directory: URL, base: String,
+                                 extensions: [String]) throws -> [ExportedOutput] {
 
-        // Gestion des collisions : on ne réutilise un nom que si NI le .srt NI le
-        // .txt n'existent déjà. Sinon on incrémente un suffixe (_2, _3, …). Le
-        // même suffixe est appliqué aux deux fichiers pour qu'ils restent appariés.
-        let baseName = availableBaseName(in: directory, base: base)
-        let srtURL = directory.appendingPathComponent(baseName + ".srt")
-        let txtURL = directory.appendingPathComponent(baseName + ".txt")
+        // Gestion des collisions : on ne réutilise un nom que si AUCUNE des
+        // extensions demandées n'existe déjà. Sinon on incrémente un suffixe
+        // (_2, _3, …). Le même suffixe est appliqué à TOUS les formats pour qu'ils
+        // restent appariés.
+        let baseName = availableBaseName(in: directory, base: base, extensions: extensions)
 
-        // Écriture atomique : pas de fichier à moitié écrit en cas d'interruption.
-        try srtContent.write(to: srtURL, atomically: true, encoding: .utf8)
+        var written: [URL] = []
+        var outputs: [ExportedOutput] = []
         do {
-            try txtContent.write(to: txtURL, atomically: true, encoding: .utf8)
+            for (format, text) in contents {
+                let url = directory.appendingPathComponent(baseName + "." + format.fileExtension)
+                // Écriture atomique : pas de fichier à moitié écrit en cas d'interruption.
+                try text.write(to: url, atomically: true, encoding: .utf8)
+                written.append(url)
+                outputs.append(ExportedOutput(format: format, url: url))
+            }
         } catch {
-            try? FileManager.default.removeItem(at: srtURL)
+            // Aucun orphelin : on retire tout ce qui a été écrit CE tour-ci.
+            for url in written { try? FileManager.default.removeItem(at: url) }
             throw error
         }
-
-        return (srtURL, txtURL)
+        return outputs
     }
 
     /// Vrai si `url` désigne un dossier existant et inscriptible.
@@ -122,15 +139,16 @@ enum SubtitleExporter {
     }
 
     /// Cherche un nom de base disponible dans `directory` : d'abord `base`, puis
-    /// `base_2`, `base_3`, … Un nom est considéré libre seulement si NI `.srt` NI
-    /// `.txt` n'existent (les deux extensions sont vérifiées ensemble, afin que le
-    /// SRT et le TXT partagent toujours le même suffixe).
-    static func availableBaseName(in directory: URL, base: String) -> String {
+    /// `base_2`, `base_3`, … Un nom est considéré libre seulement si AUCUNE des
+    /// `extensions` demandées n'existe (toutes vérifiées ensemble, afin que tous
+    /// les formats choisis partagent toujours le même suffixe).
+    static func availableBaseName(in directory: URL, base: String,
+                                  extensions: [String]) -> String {
         let fm = FileManager.default
         func taken(_ name: String) -> Bool {
-            let srt = directory.appendingPathComponent(name + ".srt")
-            let txt = directory.appendingPathComponent(name + ".txt")
-            return fm.fileExists(atPath: srt.path) || fm.fileExists(atPath: txt.path)
+            extensions.contains { ext in
+                fm.fileExists(atPath: directory.appendingPathComponent(name + "." + ext).path)
+            }
         }
 
         if !taken(base) { return base }
@@ -140,6 +158,15 @@ enum SubtitleExporter {
     }
 
     // MARK: - Génération des contenus
+
+    /// Aiguille vers le générateur de contenu du format demandé. Les générateurs
+    /// (`makeSRT`/`makeTXT`) sont inchangés — cette fonction ne fait que router.
+    static func makeContent(_ format: OutputFormat, _ segments: [TranscriptSegment]) -> String {
+        switch format {
+        case .srt: return makeSRT(segments)
+        case .txt: return makeTXT(segments)
+        }
+    }
 
     /// Construit le contenu SRT complet.
     static func makeSRT(_ segments: [TranscriptSegment]) -> String {

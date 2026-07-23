@@ -42,6 +42,14 @@ struct PreferencesView: View {
                 }
             }
 
+            Section("Formats de sortie") {
+                ForEach(OutputFormat.allCases) { format in
+                    Toggle(format.displayName, isOn: binding(for: format))
+                        // Verrou visible : le dernier format coché n'est pas décochable.
+                        .disabled(isOnlySelected(format))
+                }
+            }
+
             Section {
                 Toggle("Ouvrir le dossier à la fin de la transcription",
                        isOn: $preferences.openFolderWhenDone)
@@ -50,6 +58,30 @@ struct PreferencesView: View {
         .formStyle(.grouped)
         .frame(width: 460)
         .fixedSize(horizontal: false, vertical: true)
+    }
+
+    /// Vrai si `format` est le SEUL format actuellement coché (donc verrouillé).
+    private func isOnlySelected(_ format: OutputFormat) -> Bool {
+        preferences.selectedFormats == [format]
+    }
+
+    /// Liaison à cocher/décocher un format, avec garde-fou : on refuse de décocher
+    /// le DERNIER format actif (au moins un toujours coché), sans re-cocher
+    /// silencieusement un autre format à sa place.
+    private func binding(for format: OutputFormat) -> Binding<Bool> {
+        Binding(
+            get: { preferences.selectedFormats.contains(format) },
+            set: { isOn in
+                var next = preferences.selectedFormats
+                if isOn {
+                    next.insert(format)
+                } else {
+                    guard next.count > 1 else { return }   // dernier format : verrou
+                    next.remove(format)
+                }
+                preferences.selectedFormats = next
+            }
+        )
     }
 
     /// Libellé du dossier fixe (chemin choisi, ou invite).
