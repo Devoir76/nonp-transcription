@@ -14,6 +14,15 @@ struct TranscriptionProgressView: View {
             Text(phaseTitle)
                 .font(.headline)
 
+            // Fichier en cours de traitement (répond au manque du test du 22/07).
+            if let name = coordinator.mediaName {
+                Text(name)
+                    .font(.subheadline)
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+            }
+
             // Barre : indéterminée pendant extraction/export, précise en transcription.
             switch coordinator.phase {
             case .transcribing(let fraction):

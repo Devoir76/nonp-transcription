@@ -33,6 +33,11 @@ final class TranscriptionCoordinator: ObservableObject {
     @Published private(set) var estimatedRemaining: TimeInterval?
     @Published private(set) var modelName: String = ""
 
+    /// Nom du fichier source en cours de traitement (pour l'affichage).
+    /// Renseigné au démarrage depuis la source réellement traitée, conservé
+    /// jusqu'au prochain `reset()`.
+    @Published private(set) var mediaName: String?
+
     /// Vrai pendant un traitement (extraction, transcription ou export).
     var isRunning: Bool {
         switch phase {
@@ -62,6 +67,7 @@ final class TranscriptionCoordinator: ObservableObject {
         let model = WhisperModel.forPreset(quality)
         let modelPath = ModelStore.localURL(for: model)
         modelName = model.displayName
+        mediaName = mediaFile.url.lastPathComponent
         estimatedRemaining = nil
         transcribeStartDate = nil
         phase = .preparing
@@ -92,6 +98,7 @@ final class TranscriptionCoordinator: ObservableObject {
         phase = .idle
         elapsed = 0
         estimatedRemaining = nil
+        mediaName = nil
     }
 
     // MARK: - Pipeline
