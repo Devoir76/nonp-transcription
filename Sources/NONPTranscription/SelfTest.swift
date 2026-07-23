@@ -354,6 +354,9 @@ enum SelfTest {
     /// Témoin de formats : volontairement un SEUL format (≠ défaut {SRT,TXT}),
     /// pour prouver qu'un choix restreint survit au changement de process.
     private static let probeFormats: Set<OutputFormat> = [.srt]
+    /// Témoin de langue : volontairement ≠ défaut (.auto), pour prouver qu'un
+    /// choix explicite survit au changement de process.
+    private static let probeLang: TranscriptionLanguage = .french
 
     /// Petit compteur d'assertions, commun aux blocs de persistance.
     private final class Checker {
@@ -374,7 +377,7 @@ enum SelfTest {
     /// Snapshot des trois clés du domaine RÉEL, pour prouver qu'aucun test de
     /// persistance ne l'altère.
     private static func standardSnapshot() -> String {
-        ["outputMode", "customFolderPath", "openFolderWhenDone", "selectedFormats"]
+        ["outputMode", "customFolderPath", "openFolderWhenDone", "selectedFormats", "language"]
             .map { "\($0)=\(String(describing: UserDefaults.standard.object(forKey: $0)))" }
             .joined(separator: " ")
     }
@@ -398,6 +401,7 @@ enum SelfTest {
             let origin = Preferences(defaults: suite)
             let o0 = origin.outputMode, o1 = origin.customFolderPath
             let o2 = origin.openFolderWhenDone, o3 = origin.selectedFormats
+            let o4 = origin.language
 
             let a = Preferences(defaults: suite)
 
@@ -442,6 +446,17 @@ enum SelfTest {
             k.check("3f. selectedFormats corrompu → repli sur défaut {SRT,TXT}",
                     Preferences(defaults: suite).selectedFormats == OutputFormat.defaultSet)
 
+            // 6 — language : choix explicite aller-retour, puis repli si corrompu.
+            a.language = .french
+            k.check("6a. language=.french écrit → relu à l'identique",
+                    Preferences(defaults: suite).language == .french)
+            a.language = .auto
+            k.check("6b. language=.auto écrit → relu à l'identique",
+                    Preferences(defaults: suite).language == .auto)
+            suite.set("klingon", forKey: "language")
+            k.check("6c. language corrompu → repli sur défaut .auto",
+                    Preferences(defaults: suite).language == .auto)
+
             // 4 — indépendance des clés (constat du cycle 5 de la campagne 19/07).
             a.customFolderPath = probe
             a.outputMode = .customFolder
@@ -457,11 +472,12 @@ enum SelfTest {
             // 5 — restauration des valeurs d'origine, puis vérification.
             let r = Preferences(defaults: suite)
             r.outputMode = o0; r.customFolderPath = o1; r.openFolderWhenDone = o2
-            r.selectedFormats = o3
+            r.selectedFormats = o3; r.language = o4
             let back = Preferences(defaults: suite)
             k.check("5. valeurs d'origine restaurées",
                     back.outputMode == o0 && back.customFolderPath == o1
-                    && back.openFolderWhenDone == o2 && back.selectedFormats == o3)
+                    && back.openFolderWhenDone == o2 && back.selectedFormats == o3
+                    && back.language == o4)
         }
 
         // 5b — contrôle réel : le domaine de l'utilisateur n'a pas bougé.
@@ -489,10 +505,12 @@ enum SelfTest {
             p.customFolderPath = probePath
             p.openFolderWhenDone = probeOpen
             p.selectedFormats = probeFormats
+            p.language = probeLang
             k.check("W1. outputMode écrit en mémoire", p.outputMode == probeMode)
             k.check("W2. customFolderPath écrit en mémoire", p.customFolderPath == probePath)
             k.check("W3. openFolderWhenDone écrit en mémoire", p.openFolderWhenDone == probeOpen)
             k.check("W5. selectedFormats écrit en mémoire", p.selectedFormats == probeFormats)
+            k.check("W6. language écrit en mémoire", p.language == probeLang)
         }
 
         let after = standardSnapshot()
@@ -526,6 +544,8 @@ enum SelfTest {
             k.check("R6. selectedFormats a survécu au changement de process",
                     p.selectedFormats == probeFormats,
                     p.selectedFormats.map(\.rawValue).sorted().joined(separator: "+"))
+            k.check("R7. language a survécu au changement de process",
+                    p.language == probeLang, p.language.rawValue)
         }
 
         let after = standardSnapshot()

@@ -19,8 +19,9 @@ final class AppState: ObservableObject {
     /// Fichier actuellement sélectionné (nil = aucune sélection).
     @Published var mediaFile: MediaFile?
 
-    /// Langue choisie. Par défaut : détection automatique.
-    @Published var language: TranscriptionLanguage = .auto
+    // La langue de transcription est un réglage PERSISTANT : elle vit dans
+    // Preferences (au même titre que le dossier de sortie et les formats), et non
+    // dans cet état de session transitoire.
 
     /// Qualité choisie. Par défaut : maximale (priorité à la fidélité).
     @Published var quality: QualityPreset = .maximum

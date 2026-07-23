@@ -178,7 +178,7 @@ struct ContentView: View {
                 Text("Langue")
                     .frame(width: 90, alignment: .leading)
                     .foregroundStyle(.secondary)
-                Picker("", selection: $state.language) {
+                Picker("", selection: $preferences.language) {
                     ForEach(TranscriptionLanguage.allCases) { lang in
                         Text(lang.displayName).tag(lang)
                     }
@@ -217,7 +217,7 @@ struct ContentView: View {
             guard let file = state.mediaFile, let tools = state.tools else { return }
             coordinator.start(
                 mediaFile: file,
-                language: state.language,
+                language: preferences.language,
                 quality: state.quality,
                 tools: tools,
                 outputDirectory: preferences.outputDirectory(for: file.url),

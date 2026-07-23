@@ -73,6 +73,17 @@ final class Preferences: ObservableObject {
         }
     }
 
+    /// Langue de transcription choisie. Persistée ; défaut .auto (détection
+    /// automatique) — comportement V1 au premier lancement préservé. On stocke la
+    /// rawValue stable (jamais le displayName localisé).
+    @Published var language: TranscriptionLanguage {
+        didSet {
+            defaults.set(language.rawValue, forKey: Keys.language)
+            trace(Keys.language, wrote: language.rawValue,
+                  reread: defaults.string(forKey: Keys.language))
+        }
+    }
+
     /// Formats de sortie choisis. Défaut {SRT, TXT} = comportement V1.
     /// Stocké en UserDefaults comme tableau de rawValue (un Set n'y va pas
     /// directement) ; relu vers un Set, jamais vide (repli sur le défaut).
@@ -95,6 +106,7 @@ final class Preferences: ObservableObject {
         static let customFolderPath = "customFolderPath"
         static let openFolderWhenDone = "openFolderWhenDone"
         static let selectedFormats = "selectedFormats"
+        static let language = "language"
     }
 
     /// `defaults` est injectable UNIQUEMENT pour les tests (domaine isolé).
@@ -112,6 +124,9 @@ final class Preferences: ObservableObject {
         let savedFormats = defaults.stringArray(forKey: Keys.selectedFormats)
             .map { Set($0.compactMap(OutputFormat.init)) }
         selectedFormats = (savedFormats?.isEmpty == false) ? savedFormats! : OutputFormat.defaultSet
+        // Langue : rawValue relue ; repli sûr sur .auto si absente ou inconnue.
+        let savedLang = defaults.string(forKey: Keys.language)
+        language = savedLang.flatMap(TranscriptionLanguage.init) ?? .auto
         traceLoad()
     }
 
@@ -153,12 +168,14 @@ final class Preferences: ObservableObject {
         }
         let m = state(Keys.outputMode), p = state(Keys.customFolderPath)
         let o = state(Keys.openFolderWhenDone), f = state(Keys.selectedFormats)
+        let l = state(Keys.language)
         prefsLog.notice("""
             chargement \
             outputMode=\(m, privacy: .public)/\(self.outputMode.rawValue, privacy: .public) \
             customFolderPath=\(p, privacy: .public)/\(fingerprint(self.customFolderPath), privacy: .public) \
             openFolderWhenDone=\(o, privacy: .public)/\(String(self.openFolderWhenDone), privacy: .public) \
-            selectedFormats=\(f, privacy: .public)/\(Self.canonical(self.selectedFormats), privacy: .public)
+            selectedFormats=\(f, privacy: .public)/\(Self.canonical(self.selectedFormats), privacy: .public) \
+            language=\(l, privacy: .public)/\(self.language.rawValue, privacy: .public)
             """)
     }
 
