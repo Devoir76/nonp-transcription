@@ -25,12 +25,14 @@ effectuer avant de poser un tag de version. Aucune automatisation ici.
 - [ ] Commit ayant produit le binaire identifié sans ambiguïté.
 - [ ] Tag de version posé exactement sur ce commit.
 
-### Cas V1.1.0 (prochaine release)
+### Cas V1.2.0 (release courante)
 
-- [ ] Version affichée = **`1.1.0`**
-- [ ] `CFBundleVersion` **≥ 2**
-- [ ] Commit du binaire validé, identifié sans ambiguïté
-- [ ] Tag `v1.1.0` posé exactement sur ce commit
+- [ ] Version affichée = **`1.2.0`**
+- [ ] `CFBundleVersion` = **`5`** (croissant depuis le build 4 de la 1.1.0)
+- [ ] Identifiant de bundle = **`com.nonp.transcription`** (production, `--release`)
+- [ ] Commit du binaire validé = le **commit de préparation de la release 1.2.0**,
+      identifié sans ambiguïté
+- [ ] Tag **`v1.2.0`** posé exactement sur ce commit
 
 ## Test de mise à niveau depuis V1.0 (release production uniquement)
 
