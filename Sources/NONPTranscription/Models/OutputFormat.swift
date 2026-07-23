@@ -9,7 +9,7 @@ import Foundation
 enum OutputFormat: String, CaseIterable, Identifiable, Sendable {
     case srt        // sous-titres horodatés (montage)
     case txt        // texte brut (lecture, citation)
-    // case vtt      // Phase 2
+    case vtt        // sous-titres WebVTT (web, <track>)
 
     var id: String { rawValue }
 
@@ -21,6 +21,7 @@ enum OutputFormat: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .srt: return "SRT — sous-titres horodatés"
         case .txt: return "TXT — texte brut"
+        case .vtt: return "VTT — sous-titres WebVTT"
         }
     }
 
@@ -29,6 +30,7 @@ enum OutputFormat: String, CaseIterable, Identifiable, Sendable {
         switch self {
         case .srt: return "doc.text"
         case .txt: return "doc.plaintext"
+        case .vtt: return "captions.bubble"
         }
     }
 

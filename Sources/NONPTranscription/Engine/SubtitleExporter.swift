@@ -165,6 +165,7 @@ enum SubtitleExporter {
         switch format {
         case .srt: return makeSRT(segments)
         case .txt: return makeTXT(segments)
+        case .vtt: return makeVTT(segments)
         }
     }
 
@@ -188,13 +189,44 @@ enum SubtitleExporter {
         segments.map(\.text).joined(separator: "\n") + "\n"
     }
 
-    /// Convertit des millisecondes en timecode SRT « HH:MM:SS,mmm ».
-    static func timecode(_ milliseconds: Int) -> String {
+    /// Construit le contenu WebVTT : entête obligatoire « WEBVTT », puis un cue par
+    /// segment (même structure que SRT : identifiant, ligne timecode, texte). Seul
+    /// le séparateur de millisecondes diffère (« . »), et le texte est échappé.
+    static func makeVTT(_ segments: [TranscriptSegment]) -> String {
+        var blocks: [String] = []
+        for segment in segments {
+            let block = """
+            \(segment.id)
+            \(timecode(segment.startMs, separator: ".")) --> \(timecode(segment.endMs, separator: "."))
+            \(escapeVTT(segment.text))
+            """
+            blocks.append(block)
+        }
+        // Entête séparée du premier cue par une ligne vide ; cues séparés par une
+        // ligne vide ; fichier terminé par \n.
+        return "WEBVTT\n\n" + blocks.joined(separator: "\n\n") + "\n"
+    }
+
+    /// Échappement WebVTT minimal et RÉVERSIBLE : « & » d'abord (sinon on
+    /// double-échapperait les entités produites ensuite), puis « < » et « > ».
+    /// Sans cela, un « < » présent dans un témoignage serait interprété comme une
+    /// balise VTT et casserait le rendu. Le résultat canonique [TranscriptSegment]
+    /// reste verbatim — c'est une transformation de packaging d'export (§7).
+    private static func escapeVTT(_ text: String) -> String {
+        text.replacingOccurrences(of: "&", with: "&amp;")
+            .replacingOccurrences(of: "<", with: "&lt;")
+            .replacingOccurrences(of: ">", with: "&gt;")
+    }
+
+    /// Convertit des millisecondes en timecode « HH:MM:SS<sep>mmm ».
+    /// `separator` vaut « , » (SRT) par défaut ; VTT passe « . ».
+    static func timecode(_ milliseconds: Int, separator: String = ",") -> String {
         let ms = max(0, milliseconds)
         let hours = ms / 3_600_000
         let minutes = (ms % 3_600_000) / 60_000
         let seconds = (ms % 60_000) / 1000
         let millis = ms % 1000
-        return String(format: "%02d:%02d:%02d,%03d", hours, minutes, seconds, millis)
+        return String(format: "%02d:%02d:%02d", hours, minutes, seconds)
+            + separator + String(format: "%03d", millis)
     }
 }

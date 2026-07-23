@@ -272,7 +272,45 @@ enum SelfTest {
 
         print("[selftest] bilan BUG-007 + BUG-008 : "
             + (failures == 0 ? "\(total)/\(total) OK" : "\(failures)/\(total) échec(s)"))
-        return failures == 0 ? 0 : 5
+
+        // Cas VTT (Phase 2) — packaging WebVTT à partir des mêmes segments
+        // synthétiques. Bilan SÉPARÉ : n'entre PAS dans le décompte BUG-007 + BUG-008
+        // ci-dessus (qui reste à 13/13).
+        let vtt = Checker()
+        do {
+            let c = makeCase("casVTT", fixedMode: 0o755)
+            let out = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
+                                                  formats: [.vtt], outputDirectory: c.fixed)
+            let url = out.url(for: .vtt)
+            let content = url.flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
+            let tcLines = content.split(separator: "\n").filter { $0.contains("-->") }
+            vtt.check("V1. un seul fichier .vtt produit",
+                      out.count == 1 && url?.pathExtension == "vtt", url?.lastPathComponent ?? "nil")
+            vtt.check("V2. entête WEBVTT en tête", content.hasPrefix("WEBVTT"))
+            vtt.check("V3. timecodes en « . », jamais « , »",
+                      !tcLines.isEmpty && tcLines.allSatisfy { $0.contains(".") && !$0.contains(",") })
+            vtt.check("V4. un cue par segment (\(segments.count))", tcLines.count == segments.count)
+
+            // V5 — échappement WebVTT : seul point qui réécrit les octets du texte
+            // (§7). Un segment dont le texte est exactement « < & > » doit ressortir
+            // « &lt; &amp; &gt; ». Le contains() épingle À LA FOIS la présence de
+            // l'échappement ET l'ordre « & d'abord » : si « < » était échappé avant
+            // « & », le « & » de « &lt; » serait re-échappé en « &amp;lt; » et la
+            // chaîne attendue n'apparaîtrait pas.
+            let escSeg = [TranscriptSegment(id: 1, startMs: 0, endMs: 1000, text: "< & >")]
+            let escCase = makeCase("casVTTesc", fixedMode: 0o755)
+            let escOut = try SubtitleExporter.export(segments: escSeg, sourceURL: escCase.src,
+                                                     formats: [.vtt], outputDirectory: escCase.fixed)
+            let escContent = escOut.url(for: .vtt)
+                .flatMap { try? String(contentsOf: $0, encoding: .utf8) } ?? ""
+            vtt.check("V5. échappement WebVTT (< & > → &lt; &amp; &gt;, & traité en premier)",
+                      escContent.contains("&lt; &amp; &gt;"))
+        } catch {
+            vtt.check("V. export VTT", false, error.localizedDescription)
+        }
+        let vttCode = vtt.report("format VTT (Phase 2)")
+
+        return (failures == 0 && vttCode == 0) ? 0 : 5
     }
 
     /// Supprime une arborescence de test, y compris les dossiers rendus
