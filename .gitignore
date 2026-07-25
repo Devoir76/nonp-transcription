@@ -62,6 +62,10 @@ Resources/AppIcon.iconset/   # intermédiaire régénérable (on garde AppIcon.i
 secrets/
 config.local.*
 
+# Config locale de l'assistant (chemins perso / coffre — hors dépôt public)
+.claude/
+CLAUDE.md
+
 # ===== Éditeurs / IDE =====
 .vscode/
 .idea/
