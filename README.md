@@ -1,289 +1,80 @@
 # NONP Transcription
 
-Application macOS native, locale et sans abonnement, qui génère des fichiers
-**SRT** et **TXT** extrêmement fidèles à partir de vidéos ou de fichiers audio.
-Aucune donnée n'est envoyée sur Internet : tout le traitement se fait sur votre
-Mac. Aucune limite de durée.
+**Transcription locale, fidèle, sans limite.**
 
-Conçue pour Apple Silicon (testée sur MacBook Air / Apple M3, macOS 26).
+Application macOS **libre et open source** qui transcrit vos fichiers **audio et vidéo** en texte et
+sous-titres (TXT, SRT, VTT), **entièrement sur votre Mac**. Aucune donnée n'est envoyée sur Internet,
+aucun abonnement, aucune limite de durée.
 
----
+Elle repose sur [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (modèle Whisper *large-v3*,
+accéléré par Metal) et [FFmpeg](https://ffmpeg.org), tous deux embarqués dans l'application.
 
-## Sommaire
+> **Pourquoi « open source » compte ici.** Le code est public : n'importe qui peut vérifier que la
+> transcription se fait **100 % localement** et que **rien ne quitte votre Mac**. Pour des enregistrements
+> sensibles — témoignages, entretiens — cette promesse de confidentialité est ainsi **vérifiable**, pas
+> seulement affirmée.
 
-- [Présentation](#présentation)
-- [Architecture générale](#architecture-générale)
-- [Dépendances embarquées](#dépendances-embarquées-et-versions)
-- [Formats pris en charge](#formats-pris-en-charge)
-- [Compilation](#compilation)
-- [Lancement](#lancement)
-- [Emplacement du modèle téléchargé](#emplacement-du-modèle-téléchargé)
-- [Mise à jour des binaires et du modèle](#mise-à-jour-des-binaires-et-du-modèle)
-- [Tests automatiques (`--selftest`)](#tests-automatiques---selftest)
-- [Limites connues](#limites-connues)
+## Fonctions
+- **Transcription locale** d'audio et de vidéo (MP4, MOV, MKV, AVI, MP3, WAV, M4A).
+- **Formats de sortie** au choix : **TXT** (texte), **SRT** et **VTT** (sous-titres horodatés).
+- **Langue** : détection automatique ou choix explicite (mémorisé).
+- **Fidélité** : le texte produit par Whisper n'est jamais réécrit ni reformulé.
+- **Intégrité des modèles** : empreinte SHA-256 vérifiée (un modèle corrompu est refusé).
+- **Sans abonnement, sans limite de durée, 100 % hors ligne** une fois le modèle installé.
 
----
+## Prérequis
+- **macOS 14 (Sonoma)** ou plus récent.
+- **Mac Apple Silicon (M1 ou plus récent).**
+- Environ 3 Go d'espace disque pour le modèle (téléchargé une seule fois au premier lancement).
 
-## Présentation
+## Installation
+1. Téléchargez la dernière version depuis **[nonp.fr](https://nonp.fr/)** (fichier `.zip`).
+2. Décompressez-le et glissez **NONP Transcription** dans votre dossier **Applications**.
+3. **Premier lancement.** L'application étant distribuée librement et gratuitement (sans certificat Apple
+   payant), macOS affiche un avertissement de sécurité au premier lancement. C'est normal. Pour l'autoriser :
+   - ouvrez **Réglages Système → Confidentialité et sécurité** ;
+   - descendez jusqu'au message concernant « NONP Transcription » et cliquez sur **« Ouvrir quand même »**.
 
-Le principe est volontairement minimal :
+   *(Sur macOS Sequoia et versions ultérieures, ce passage par les Réglages Système remplace l'ancien
+   « clic droit → Ouvrir ».)*
+4. *(Optionnel, recommandé.)* Vérifiez l'intégrité de votre téléchargement avec l'empreinte SHA-256
+   publiée à côté du fichier :
 
-1. Ouvrir l'application.
-2. Glisser une vidéo (ou un fichier audio).
-3. Choisir la langue et la qualité.
-4. Cliquer sur **Transcrire**.
-5. Obtenir automatiquement, **à côté du fichier source** :
-   - `nom_original.srt`
-   - `nom_original.txt`
-6. Le dossier contenant les résultats s'ouvre automatiquement.
+   ```
+   shasum -a 256 "NONP Transcription.zip"
+   ```
+5. Au premier lancement, l'application télécharge le modèle de transcription (~2,9 Go) **une seule fois**.
+   Ensuite, tout fonctionne **hors ligne**.
 
-**Fidélité garantie** : la transcription n'est jamais reformulée, résumée,
-corrigée ni « nettoyée » de ses hésitations. Les timecodes sont conservés
-exactement tels que produits par le moteur. Aucune traduction n'est effectuée.
+## Utilisation
+1. Glissez un fichier audio ou vidéo dans la fenêtre.
+2. Choisissez la **langue** et le(s) **format(s)** de sortie.
+3. Cliquez sur **Transcrire**. Les fichiers sont générés à côté du média (ou dans le dossier de votre choix).
 
----
+## Confidentialité
+Toute la transcription se déroule **sur votre Mac**. L'application n'envoie aucune donnée sur Internet : la
+seule connexion réseau est le **téléchargement initial du modèle**. Ensuite, elle fonctionne entièrement
+hors ligne.
 
-## Architecture générale
+## Licence
+NONP Transcription est distribué sous **GNU GPL v3 ou ultérieure** (voir [`LICENSE`](LICENSE)). Il embarque
+FFmpeg (GPLv3), whisper.cpp (MIT) et le modèle Whisper (MIT) — voir
+[`THIRD_PARTY_NOTICES`](THIRD_PARTY_NOTICES.md).
 
-Interface SwiftUI très fine au-dessus d'un cœur métier découplé par
-**protocoles** (points d'extension pour les futures versions).
-
-```
-UI (SwiftUI)                    ContentView, DropZoneView, FileInfoView,
-                                ModelStatusView, TranscriptionProgressView,
-                                TranscriptionDoneView
-        │
-Coordination                    TranscriptionCoordinator
-        │                       (extraction → transcription → export → ouverture)
-        │
-Cœur métier (protocoles)        AudioExtractor  ◄── FFmpegAudioExtractor
-                                TranscriptionEngine ◄── WhisperCppEngine
-                                SubtitleExporter (SRT + TXT)
-                                EmbeddedTools (localise ffmpeg / whisper)
-        │
-État & modèles                  AppState, ModelStore, ModelDownloader,
-                                WhisperModel, MediaFile, TranscriptSegment
-        │
-Outils système                  ProcessRunner (sous-processus + progression)
-```
-
-Principe clé d'évolutivité : chaque futur besoin (traduction, traitement par
-lots, découpage intelligent) s'ajoutera comme **nouvelle implémentation d'un
-protocole existant**, sans réécrire l'application.
-
-### Arborescence
+## Construire depuis les sources
+L'application se compile sans Xcode, avec SwiftPM (macOS 14+) :
 
 ```
-NONP-Transcription/
-├── Package.swift               Définition SwiftPM (macOS 14+)
-├── README.md
-├── .gitignore
-├── Sources/NONPTranscription/
-│   ├── NONPTranscriptionApp.swift   Point d'entrée (@main)
-│   ├── ContentView.swift            Vue principale
-│   ├── SelfTest.swift               Harnais de test headless
-│   ├── Models/                      MediaFile, WhisperModel, TranscriptSegment, …
-│   ├── State/                       AppState, ModelStore, ModelDownloader, Coordinator
-│   ├── Engine/                      ProcessRunner, AudioExtractor, TranscriptionEngine,
-│   │                               SubtitleExporter, EmbeddedTools
-│   └── Views/                       DropZoneView, FileInfoView, ModelStatusView, …
-├── Resources/
-│   ├── Info.plist                   Carte d'identité du bundle
-│   └── AppIcon.icns                 Icône de l'application
-├── Vendor/                          Binaires embarqués (voir ci-dessous)
-│   ├── bin/  ffmpeg, whisper-cli
-│   └── lib/  bibliothèques de ffmpeg (relocalisées)
-├── Scripts/
-│   ├── build_app.sh                 Compile + assemble le .app
-│   └── generate_icon.swift          Génère l'icône
-└── dist/
-    └── NONP Transcription.app       Application finale (produite par le build)
+./Scripts/build_app.sh            # build de développement
+./Scripts/build_app.sh --release  # build de production
 ```
 
----
+Détails (architecture, dépendances embarquées, mise à jour des binaires, tests `--selftest`) :
+voir [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md).
 
-## Dépendances embarquées et versions
+## Origine
+NONP Transcription est né du projet mémoriel **NONP** ([nonp.fr](https://nonp.fr/)), pour aider à
+transcrire fidèlement des témoignages. Il est proposé gratuitement à toutes et tous.
 
-Tout est **embarqué dans le `.app`** : aucune installation requise côté
-utilisateur, aucune utilisation du Terminal.
-
-| Composant | Version | Rôle | Emplacement dans l'app |
-|---|---|---|---|
-| **whisper.cpp** | commit `080bbbe` (2026-07-11), ggml 0.16.0 | Moteur de transcription, compilé **statique** avec accélération **Metal** | `Contents/Resources/bin/whisper-cli` |
-| **FFmpeg** | 8.1.2 | Extraction/conversion audio (→ WAV 16 kHz mono) | `Contents/Resources/bin/ffmpeg` (+ `lib/`) |
-| **Modèle Whisper** | `ggml-large-v3.bin` (3 095 033 483 octets) | Poids du modèle | **hors de l'app** (voir plus bas) |
-
-> Le modèle n'est pas embarqué (≈ 2,9 Go) : il est téléchargé une seule fois
-> au premier usage, depuis le dépôt officiel Hugging Face
-> `ggerganov/whisper.cpp`.
-
-Modèles utilisés selon la qualité choisie :
-
-| Qualité | Modèle | Taille | Décodage |
-|---|---|---|---|
-| **Qualité maximale** (défaut) | `large-v3` | 2,88 Go | beam search (`-bs 5`) |
-| **Rapide** | `large-v3-turbo` | 1,51 Go | glouton (greedy) |
-
-Outils requis :
-- **Pour compiler l'application** : uniquement les **Command Line Tools**
-  Xcode (Swift 6.3). Les binaires sont déjà fournis dans `Vendor/`.
-- **Pour régénérer les binaires embarqués** (optionnel) : `cmake` (4.4.0) et
-  `dylibbundler`, via Homebrew. *Non nécessaires* pour construire l'app.
-
----
-
-## Formats pris en charge
-
-**Vidéo** : MP4, MOV, AVI, MKV
-**Audio** : MP3, WAV, M4A
-
-Langues proposées : Auto (détection), Anglais, Allemand, Espagnol, Français,
-Italien.
-
----
-
-## Compilation
-
-**Seul prérequis pour compiler l'application** : les outils de ligne de commande
-Xcode (qui fournissent Swift). Sur un Mac neuf, une seule commande :
-
-```bash
-xcode-select --install
-```
-
-Les binaires `ffmpeg` et `whisper-cli` sont **déjà fournis** dans `Vendor/` :
-aucune autre installation n'est nécessaire pour construire l'application.
-(`cmake` et `dylibbundler` ne servent QU'À régénérer ces binaires — voir
-« Mise à jour des binaires » — et ne sont pas requis pour compiler l'app.)
-
-Compiler l'application :
-
-```bash
-cd "NONP-Transcription"
-./Scripts/build_app.sh            # compile en release + assemble le .app
-./Scripts/build_app.sh --run      # idem puis lance l'application
-./Scripts/build_app.sh --debug    # compilation debug (itération plus rapide)
-```
-
-Le résultat est produit dans :
-
-```
-NONP-Transcription/dist/NONP Transcription.app
-```
-
-Le script effectue automatiquement : compilation SwiftPM → assemblage du bundle
-→ copie des binaires embarqués et de l'icône → **signature ad-hoc locale**
-(suffisante pour un usage personnel, évite les blocages au lancement).
-
----
-
-## Lancement
-
-**Sans Terminal** : double-cliquer sur `NONP Transcription.app` dans le Finder.
-
-Vous pouvez déplacer le `.app` dans `/Applications` (glisser-déposer dans le
-Finder) : l'application reste fonctionnelle car elle est **relocalisable**
-(whisper-cli est autonome ; ffmpeg référence ses bibliothèques en chemin
-relatif `@executable_path/../lib` ; le modèle est stocké dans votre dossier
-utilisateur).
-
----
-
-## Emplacement du modèle téléchargé
-
-Le modèle est stocké **hors du projet** (donc hors synchronisation cloud) et
-survit aux reconstructions de l'app :
-
-```
-~/Library/Application Support/NONP Transcription/Models/ggml-large-v3.bin
-```
-
-Pour libérer de l'espace, il suffit de supprimer ce fichier : l'application
-reproposera son téléchargement au besoin.
-
----
-
-## Mise à jour des binaires et du modèle
-
-### Mettre à jour le modèle
-
-Supprimer le fichier du modèle puis le re-télécharger depuis l'application
-(bouton **Télécharger**) :
-
-```bash
-rm "~/Library/Application Support/NONP Transcription/Models/ggml-large-v3.bin"
-```
-
-Pour changer de version de modèle, ajuster les URL et tailles dans
-`Sources/NONPTranscription/Models/WhisperModel.swift` (le champ `sizeBytes` doit
-correspondre exactement à la taille du fichier officiel — il sert au contrôle
-d'intégrité).
-
-### Mettre à jour whisper.cpp (binaire)
-
-```bash
-git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git
-cd whisper.cpp
-cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
-      -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON \
-      -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF
-cmake --build build -j --config Release --target whisper-cli
-cp build/bin/whisper-cli "…/NONP-Transcription/Vendor/bin/whisper-cli"
-```
-
-### Mettre à jour FFmpeg (binaire + bibliothèques)
-
-```bash
-brew upgrade ffmpeg
-mkdir -p ffbundle/bin ffbundle/lib
-cp "$(realpath "$(brew --prefix)/bin/ffmpeg")" ffbundle/bin/ffmpeg
-chmod u+w ffbundle/bin/ffmpeg
-dylibbundler -cd -b -of -x ffbundle/bin/ffmpeg -d ffbundle/lib/ \
-             -p "@executable_path/../lib/"
-cp ffbundle/bin/ffmpeg "…/NONP-Transcription/Vendor/bin/ffmpeg"
-rm -f "…/NONP-Transcription/Vendor/lib/"*.dylib
-cp ffbundle/lib/*.dylib "…/NONP-Transcription/Vendor/lib/"
-```
-
-Puis reconstruire : `./Scripts/build_app.sh`.
-
----
-
-## Tests automatiques (`--selftest`)
-
-L'application intègre un mode de test headless qui exécute **exactement** le
-même pipeline que l'interface (extraction → transcription → export), sans
-ouvrir de fenêtre. Utile pour valider une version après modification.
-
-```bash
-APP="dist/NONP Transcription.app/Contents/MacOS/NONPTranscription"
-
-# Test complet : produit SRT + TXT, vérifie le nettoyage et l'intégrité source
-"$APP" --selftest "/chemin/vers/fichier.mp4" [--lang-en]
-
-# Test d'annulation : lance puis annule, vérifie l'absence de processus résiduel
-"$APP" --selftest-cancel "/chemin/vers/audio_long.wav"
-```
-
-Le mode complet affiche notamment : nombre de segments, chemins SRT/TXT,
-nettoyage du fichier temporaire, et confirmation que le fichier source est
-resté intact.
-
----
-
-## Limites connues
-
-- **Durée MKV/AVI dans l'interface** : la durée affichée avant transcription est
-  lue par AVFoundation, qui ne gère pas toujours MKV/AVI ; elle peut afficher
-  « — ». Cela **n'empêche pas** la transcription (ffmpeg gère ces formats).
-- **Chargement Metal** : ~7 s de chargement de la bibliothèque Metal au début de
-  chaque transcription (coût fixe, négligeable sur les fichiers longs).
-- **Estimation du temps restant** : approximative en début de traitement, elle
-  se stabilise au fil de la progression.
-- **Silences longs** : comme tout modèle Whisper, `large-v3` peut occasionnellement
-  produire du texte parasite sur de longs silences. La détection d'activité
-  vocale (VAD) est un candidat pour une future version.
-- **Un fichier à la fois** : le traitement par lots est prévu pour une V2.
-- **Application non notarisée** : signée en local (ad-hoc). Parfaite pour un
-  usage personnel ; une distribution large nécessiterait un compte développeur
-  Apple et la notarisation.
+## Contribuer
+Les contributions sont bienvenues — voir `CONTRIBUTING.md` (à venir).
