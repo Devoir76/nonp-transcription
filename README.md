@@ -77,4 +77,4 @@ NONP Transcription est né du projet mémoriel **NONP** ([nonp.fr](https://nonp.
 transcrire fidèlement des témoignages. Il est proposé gratuitement à toutes et tous.
 
 ## Contribuer
-Les contributions sont bienvenues — voir `CONTRIBUTING.md` (à venir).
+Les contributions sont bienvenues — voir [`CONTRIBUTING.md`](CONTRIBUTING.md).
