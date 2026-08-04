@@ -1,7 +1,7 @@
 // ContentView.swift — vue principale, assemble toute l'interface (Étape 1).
 //
 // Compose : en-tête · (zone de dépôt OU carte fichier) · message d'erreur
-// éventuel · menus Langue et Qualité · bouton Transcrire.
+// éventuel · options Langue de l'audio et Qualité · bouton Transcrire.
 // Le bouton est volontairement inactif à ce stade : le moteur arrive à l'Étape 3.
 
 import SwiftUI
@@ -27,6 +27,56 @@ struct ContentView: View {
     /// Modèle requis pour la qualité actuellement sélectionnée.
     private var currentModel: WhisperModel {
         WhisperModel.forPreset(state.quality)
+    }
+
+    // MARK: - Langue de l'audio (affichage seul)
+
+    /// Les deux façons de renseigner la langue. Purement d'affichage : la source
+    /// de vérité reste `preferences.language` (`.auto` = détection automatique).
+    private enum LanguageMode: Hashable { case auto, explicit }
+
+    /// Langues proposées au menu : toutes sauf `.auto`, qui est devenue le
+    /// bouton radio « Détecter automatiquement ».
+    private static let explicitLanguages: [TranscriptionLanguage] =
+        TranscriptionLanguage.allCases.filter { $0 != .auto }
+
+    private static let languageHelp =
+        "Choisissez la langue parlée dans le fichier. NONP Transcription la "
+        + "retranscrit fidèlement — il ne traduit pas."
+
+    /// Dernière langue explicite retenue, le temps de la session : sert à
+    /// repeupler le menu quand on repasse de « Détecter » à « Préciser ».
+    /// Volontairement NON persistée — seul `preferences.language` l'est.
+    @State private var lastExplicitLanguage: TranscriptionLanguage = .french
+
+    private var languageMode: LanguageMode {
+        preferences.language == .auto ? .auto : .explicit
+    }
+
+    /// Bascule radio. Passer à « Préciser » réutilise le dernier choix connu.
+    private var languageModeBinding: Binding<LanguageMode> {
+        Binding(
+            get: { languageMode },
+            set: { mode in
+                switch mode {
+                case .auto:     preferences.language = .auto
+                case .explicit: preferences.language = lastExplicitLanguage
+                }
+            }
+        )
+    }
+
+    /// Sélection du menu. En mode « Détecter », le menu est inactif et se
+    /// contente d'afficher le dernier choix — il n'écrit rien.
+    private var explicitLanguageBinding: Binding<TranscriptionLanguage> {
+        Binding(
+            get: { preferences.language == .auto ? lastExplicitLanguage : preferences.language },
+            set: { lang in
+                guard lang != .auto else { return }
+                lastExplicitLanguage = lang
+                preferences.language = lang
+            }
+        )
     }
 
     /// Conditions réunies pour pouvoir transcrire (fichier + modèle + outils).
@@ -183,28 +233,60 @@ struct ContentView: View {
         }
     }
 
-    /// Les deux menus déroulants : Langue et Qualité.
+    /// Largeur de la colonne des libellés (Langue de l'audio / Qualité).
+    private static let labelColumnWidth: CGFloat = 120
+
+    /// Les deux blocs d'options : Langue de l'audio et Qualité.
     private var optionsRow: some View {
         VStack(spacing: 14) {
-            // Langue
-            HStack {
-                Text("Langue")
-                    .frame(width: 90, alignment: .leading)
+            // Langue de l'audio : « Détecter automatiquement » (défaut) ou une
+            // langue précisée. Le libellé et l'aide disent explicitement que
+            // l'app retranscrit — elle ne traduit pas.
+            HStack(alignment: .top) {
+                Text("Langue de l'audio")
+                    .frame(width: Self.labelColumnWidth, alignment: .leading)
                     .foregroundStyle(.secondary)
-                Picker("", selection: $preferences.language) {
-                    ForEach(TranscriptionLanguage.allCases) { lang in
-                        Text(lang.displayName).tag(lang)
+                VStack(alignment: .leading, spacing: 4) {
+                    // Alignement bas : le menu se pose sur la ligne « Préciser : ».
+                    HStack(alignment: .bottom, spacing: 8) {
+                        Picker("", selection: languageModeBinding) {
+                            Text("Détecter automatiquement").tag(LanguageMode.auto)
+                            Text("Préciser :").tag(LanguageMode.explicit)
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.radioGroup)
+
+                        Picker("", selection: explicitLanguageBinding) {
+                            ForEach(Self.explicitLanguages) { lang in
+                                Text(lang.displayName).tag(lang)
+                            }
+                        }
+                        .labelsHidden()
+                        .pickerStyle(.menu)
+                        .frame(width: 130)
+                        .disabled(languageMode == .auto)
                     }
+
+                    Text(Self.languageHelp)
+                        .font(.caption)
+                        .foregroundStyle(.tertiary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
                 Spacer()
+            }
+            .help(Self.languageHelp)
+            .onAppear {
+                // Reprend le dernier choix explicite persisté, pour que le menu
+                // n'affiche pas une langue au hasard après relance.
+                if preferences.language != .auto {
+                    lastExplicitLanguage = preferences.language
+                }
             }
 
             // Qualité (avec explication sous le menu)
             HStack(alignment: .top) {
                 Text("Qualité")
-                    .frame(width: 90, alignment: .leading)
+                    .frame(width: Self.labelColumnWidth, alignment: .leading)
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 3) {
                     Picker("", selection: $state.quality) {
