@@ -217,11 +217,15 @@ struct ContentView: View {
 
     // MARK: - Sous-vues
 
+    /// Logo de l'en-tête, copié dans le bundle par Scripts/build_app.sh.
+    /// `nil` hors bundle (exécution directe du binaire de debug) : on retombe
+    /// alors sur l'icône système, pour ne jamais présenter un en-tête vide.
+    private static let headerLogo = NSImage(named: "nonp_header_logo")
+
     private var header: some View {
         HStack(spacing: 10) {
-            Image(systemName: "waveform")
-                .font(.system(size: 22, weight: .medium))
-                .foregroundStyle(.tint)
+            headerIcon
+                .frame(width: 26, height: 26)
             VStack(alignment: .leading, spacing: 1) {
                 Text("NONP Transcription")
                     .font(.title3.weight(.semibold))
@@ -230,6 +234,23 @@ struct ContentView: View {
                     .foregroundStyle(.secondary)
             }
             Spacer()
+        }
+    }
+
+    /// Le logo du produit, arrondi en rectangle continu (le squircle macOS),
+    /// ou l'icône système en repli.
+    @ViewBuilder
+    private var headerIcon: some View {
+        if let logo = Self.headerLogo {
+            Image(nsImage: logo)
+                .resizable()
+                .interpolation(.high)
+                .aspectRatio(contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
+        } else {
+            Image(systemName: "waveform")
+                .font(.system(size: 22, weight: .medium))
+                .foregroundStyle(.tint)
         }
     }
 

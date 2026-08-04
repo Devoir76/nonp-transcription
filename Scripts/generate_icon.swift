@@ -1,15 +1,30 @@
 #!/usr/bin/env swift
-// generate_icon.swift — génère l'icône de l'application (AppIcon.icns).
+// generate_icon.swift — NEUTRALISÉ (script historique, conservé pour mémoire).
 //
-// Dessine une icône sobre et reproductible : carré arrondi bleu-ardoise
-// (dégradé discret) + une forme d'onde blanche de 5 barres centrées.
-// Aucune dépendance externe (AppKit uniquement).
+// Il générait l'icône de la V1.0 à la V1.2 : un carré arrondi bleu-ardoise
+// avec une forme d'onde blanche, dessinés par code. Depuis la V1.2.1, l'icône
+// est un jeu de fichiers versionné dans Resources/AppIcon.iconset ; ce script
+// l'écraserait s'il était relancé. Il refuse donc de s'exécuter.
 //
-// Usage : swift Scripts/generate_icon.swift Resources
-//   → produit Resources/AppIcon.icns (via un dossier .iconset + iconutil)
+// Pour régénérer l'icône du bundle après modification de l'iconset :
+//   iconutil -c icns Resources/AppIcon.iconset -o Resources/AppIcon.icns
+//
+// Le code de dessin est laissé intact en dessous : il documente l'icône
+// d'origine et resterait le point de départ d'une icône générée.
 
 import AppKit
 import Foundation
+
+// Garde-fou : placé AVANT toute écriture (la première, plus bas, est la
+// création de Resources/AppIcon.iconset).
+FileHandle.standardError.write(Data("""
+    generate_icon.swift est neutralisé : il écraserait l'icône du produit.
+    L'icône vit désormais dans Resources/AppIcon.iconset (fichiers versionnés).
+    Pour reconstruire Resources/AppIcon.icns à partir de cet iconset :
+      iconutil -c icns Resources/AppIcon.iconset -o Resources/AppIcon.icns
+
+    """.utf8))
+exit(1)
 
 // Dossier de sortie (par défaut : Resources).
 let outputDir = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "Resources"

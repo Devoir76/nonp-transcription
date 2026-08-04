@@ -4,6 +4,25 @@ Toutes les évolutions notables de NONP Transcription.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/) ;
 règle de versionnement : le tag Git est égal à `CFBundleShortVersionString`.
 
+## [1.2.1] — en cours
+
+Clarté de l'interface. Aucune évolution du moteur.
+
+### Modifié
+- **Sélecteur de langue clarifié** : le menu « Langue » pouvait se lire comme une cible
+  de traduction. Il devient « **Langue de l'audio** », avec deux options explicites —
+  « Détecter automatiquement » (défaut inchangé) ou « Préciser : » suivi du menu des
+  langues — et une ligne d'aide : « Choisissez la langue parlée dans le fichier.
+  NONP Transcription la retranscrit fidèlement — il ne traduit pas. »
+- **Nouvelle icône d'application** et logo repris dans l'en-tête de la fenêtre.
+  L'icône est désormais un jeu de fichiers versionné (`Resources/AppIcon.iconset`) au
+  lieu d'être dessinée par code ; `Scripts/generate_icon.swift` est neutralisé pour
+  ne plus l'écraser.
+
+> Fidélité : libellés et affichage seulement. Le moteur, les paramètres whisper-cli,
+> le parsing, les timecodes et l'export sont inchangés — le résultat de Whisper est
+> identique. La persistance du choix de langue (défaut « Auto ») est préservée.
+
 ## [1.2.0] — 2026-07-23
 
 Durcissement de la fiabilité et petites fonctions cohérentes. macOS, 100 % local.

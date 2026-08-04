@@ -81,6 +81,13 @@ if [[ -f "$PROJECT_ROOT/Resources/AppIcon.icns" ]]; then
     cp "$PROJECT_ROOT/Resources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 fi
 
+# Logo affiché dans l'en-tête de la fenêtre. Absent du bundle (ou build lancée
+# hors bundle, en debug), l'interface retombe sur l'icône système « waveform ».
+if [[ -f "$PROJECT_ROOT/Resources/nonp_header_logo.png" ]]; then
+    cp "$PROJECT_ROOT/Resources/nonp_header_logo.png" \
+       "$APP_BUNDLE/Contents/Resources/nonp_header_logo.png"
+fi
+
 # --- 2b) Binaires embarqués (ffmpeg + whisper.cpp) -----------------------
 # On place les outils dans Resources/bin et leurs bibliothèques dans
 # Resources/lib. ffmpeg a été relocalisé (dylibbundler) pour chercher ses
