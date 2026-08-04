@@ -7,9 +7,23 @@
 
 import Foundation
 
+/// Résultat canonique d'une transcription : les segments, et la langue dans
+/// laquelle le moteur a effectivement travaillé.
+///
+/// `languageCode` est le code brut du moteur (« fr », « en »…) : celui qu'il a
+/// détecté en mode automatique, ou celui qui lui a été imposé. Il vaut `nil`
+/// quand le moteur ne le renseigne pas — l'export omet alors le suffixe plutôt
+/// que d'affirmer une langue non établie. Les segments, eux, sont inchangés :
+/// cette information est une donnée du résultat, pas une transformation.
+struct TranscriptionOutcome: Sendable {
+    let segments: [TranscriptSegment]
+    let languageCode: String?
+}
+
 /// Contrat d'un moteur de transcription : d'un WAV vers des segments horodatés.
 protocol TranscriptionEngine {
-    /// Transcrit `wavURL` (16 kHz mono) et renvoie les segments.
+    /// Transcrit `wavURL` (16 kHz mono) et renvoie les segments accompagnés de
+    /// la langue du résultat.
     /// - Parameter onProgress: fraction 0…1, appelée au fil du traitement.
     func transcribe(
         wavURL: URL,
@@ -17,7 +31,7 @@ protocol TranscriptionEngine {
         language: TranscriptionLanguage,
         quality: QualityPreset,
         onProgress: @Sendable @escaping (Double) -> Void
-    ) async throws -> [TranscriptSegment]
+    ) async throws -> TranscriptionOutcome
 }
 
 enum TranscriptionEngineError: LocalizedError {
@@ -44,7 +58,7 @@ struct WhisperCppEngine: TranscriptionEngine {
         language: TranscriptionLanguage,
         quality: QualityPreset,
         onProgress: @Sendable @escaping (Double) -> Void
-    ) async throws -> [TranscriptSegment] {
+    ) async throws -> TranscriptionOutcome {
 
         // Préfixe de sortie temporaire : whisper écrira <prefix>.json
         let prefix = FileManager.default.temporaryDirectory
@@ -85,9 +99,13 @@ struct WhisperCppEngine: TranscriptionEngine {
         defer { try? FileManager.default.removeItem(at: jsonURL) }
 
         let segments: [TranscriptSegment]
+        let languageCode: String?
         do {
             let data = try Data(contentsOf: jsonURL)
             let decoded = try JSONDecoder().decode(WhisperJSON.self, from: data)
+            // Langue du RÉSULTAT (`result.language`), pas de la demande
+            // (`params.language`, qui vaut « auto » en détection automatique).
+            languageCode = decoded.result?.language
             segments = decoded.transcription.enumerated().map { index, item in
                 TranscriptSegment(
                     id: index + 1,
@@ -103,7 +121,7 @@ struct WhisperCppEngine: TranscriptionEngine {
         }
 
         onProgress(1.0)
-        return segments
+        return TranscriptionOutcome(segments: segments, languageCode: languageCode)
     }
 
     /// Extrait la fraction (0…1) d'une ligne « … progress = N% ».
@@ -119,10 +137,16 @@ struct WhisperCppEngine: TranscriptionEngine {
 // MARK: - Décodage du JSON whisper.cpp (seuls les champs utiles).
 private struct WhisperJSON: Decodable {
     let transcription: [Item]
+    /// Optionnel à dessein : une version de whisper.cpp qui n'écrirait pas ce
+    /// bloc doit dégrader (export sans suffixe de langue), jamais échouer.
+    let result: ResultInfo?
 
     struct Item: Decodable {
         let offsets: Offsets
         let text: String
+    }
+    struct ResultInfo: Decodable {
+        let language: String?
     }
     struct Offsets: Decodable {
         let from: Int   // début en millisecondes

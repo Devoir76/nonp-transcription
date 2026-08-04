@@ -63,6 +63,154 @@ enum SelfTest {
         if args.contains("--export-cases") {
             runBlocking { await exportCases() }
         }
+        // Nommage des exports par langue (V1.2.1). Sans moteur ni modèle.
+        if args.contains("--naming-cases") {
+            runBlocking { await namingCases() }
+        }
+    }
+
+    // MARK: - Nommage des exports par langue (V1.2.1)
+
+    /// Vérifie la construction du nom `<base>_<code>.<ext>` : normalisation des
+    /// codes, combinaison avec les formats (ADR-0002), anti-collision, absence
+    /// de langue, et surtout que le CONTENU écrit ne dépend jamais du nom.
+    ///
+    /// Exerce le VRAI `SubtitleExporter` sur disque (segments synthétiques) :
+    /// ni média ni modèle requis, exécution en une seconde.
+    private static func namingCases() async -> Int32 {
+        let fm = FileManager.default
+        let root = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("nonp-naming-\(getpid())", isDirectory: true)
+        defer { forceRemove(root) }
+
+        let segments = [
+            TranscriptSegment(id: 1, startMs: 0, endMs: 1500, text: "Premier segment."),
+            TranscriptSegment(id: 2, startMs: 1500, endMs: 3000, text: "Second segment.")
+        ]
+        var failures = 0
+        var total = 0
+        func check(_ label: String, _ ok: Bool, _ detail: String = "") {
+            total += 1
+            if !ok { failures += 1 }
+            print("[selftest] \(ok ? "OK  " : "ÉCHEC") — \(label)\(detail.isEmpty ? "" : " · \(detail)")")
+        }
+
+        /// Prépare un dossier de travail contenant « <name>.mp4 » et le renvoie
+        /// avec l'URL de cette source fictive.
+        func makeCase(_ name: String, media: String = "entretien") -> (dir: URL, src: URL) {
+            let dir = root.appendingPathComponent(name, isDirectory: true)
+            try? fm.createDirectory(at: dir, withIntermediateDirectories: true)
+            return (dir, dir.appendingPathComponent("\(media).mp4"))
+        }
+
+        // --- N1 à N4 : la fonction pure, sans disque -------------------------
+        check("N1. code simple → suffixe ajouté",
+              ExportNaming.baseName(source: "entretien", languageCode: "fr") == "entretien_fr",
+              ExportNaming.baseName(source: "entretien", languageCode: "fr"))
+        check("N2. casse et espaces normalisés (« FR » → « fr »)",
+              ExportNaming.baseName(source: "interview", languageCode: " FR ") == "interview_fr")
+        check("N3. langue absente (nil) → nom nu, aucun placeholder",
+              ExportNaming.baseName(source: "entretien", languageCode: nil) == "entretien")
+        check("N4. codes inexploitables → nom nu",
+              ["auto", "", "   ", "xyz", "yue", "f", "f1"].allSatisfy {
+                  ExportNaming.baseName(source: "e", languageCode: $0) == "e"
+              })
+
+        // --- N5 : combinaison avec les formats choisis (ADR-0002) ------------
+        do {
+            let c = makeCase("n5")
+            let out = try SubtitleExporter.export(
+                segments: segments, sourceURL: c.src,
+                formats: [.txt, .srt, .vtt], outputDirectory: c.dir, languageCode: "en")
+            let names = Set(out.map(\.url.lastPathComponent))
+            check("N5. un suffixe de langue, trois extensions",
+                  names == ["entretien_en.txt", "entretien_en.srt", "entretien_en.vtt"],
+                  names.sorted().joined(separator: " "))
+        } catch {
+            check("N5. combinaison formats", false, error.localizedDescription)
+        }
+
+        // --- N6 : anti-collision APRÈS le suffixe de langue ------------------
+        do {
+            let c = makeCase("n6")
+            // Un export précédent occupe déjà « entretien_fr.srt ».
+            try "occupé".write(to: c.dir.appendingPathComponent("entretien_fr.srt"),
+                               atomically: true, encoding: .utf8)
+            let out = try SubtitleExporter.export(
+                segments: segments, sourceURL: c.src,
+                formats: [.srt, .txt], outputDirectory: c.dir, languageCode: "fr")
+            let srt = out.url(for: .srt)!.lastPathComponent
+            let txt = out.url(for: .txt)!.lastPathComponent
+            // Le fichier occupant n'a pas été écrasé : il vaut toujours « occupé ».
+            let intact = (try? String(contentsOf: c.dir.appendingPathComponent("entretien_fr.srt"),
+                                      encoding: .utf8)) == "occupé"
+            check("N6. collision → entretien_fr_2, sans écraser l'existant",
+                  srt == "entretien_fr_2.srt" && txt == "entretien_fr_2.txt" && intact,
+                  "\(srt) · \(txt) · occupant intact=\(intact)")
+        } catch {
+            check("N6. anti-collision avec suffixe", false, error.localizedDescription)
+        }
+
+        // --- N7 : une langue différente ne collisionne pas -------------------
+        do {
+            let c = makeCase("n7")
+            _ = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
+                                            formats: [.srt], outputDirectory: c.dir,
+                                            languageCode: "fr")
+            let out = try SubtitleExporter.export(segments: segments, sourceURL: c.src,
+                                                  formats: [.srt], outputDirectory: c.dir,
+                                                  languageCode: "en")
+            check("N7. deux langues cohabitent sans suffixe numérique",
+                  out.url(for: .srt)!.lastPathComponent == "entretien_en.srt"
+                  && fm.fileExists(atPath: c.dir.appendingPathComponent("entretien_fr.srt").path))
+        } catch {
+            check("N7. cohabitation de deux langues", false, error.localizedDescription)
+        }
+
+        // --- N8 : le CONTENU ne dépend pas du nom (exigence de fidélité) -----
+        do {
+            let avec = makeCase("n8-avec")
+            let sans = makeCase("n8-sans")
+            let a = try SubtitleExporter.export(segments: segments, sourceURL: avec.src,
+                                                formats: [.srt, .txt, .vtt],
+                                                outputDirectory: avec.dir, languageCode: "fr")
+            let s = try SubtitleExporter.export(segments: segments, sourceURL: sans.src,
+                                                formats: [.srt, .txt, .vtt],
+                                                outputDirectory: sans.dir, languageCode: nil)
+            var identical = true
+            for format in [OutputFormat.srt, .txt, .vtt] {
+                let ta = try String(contentsOf: a.url(for: format)!, encoding: .utf8)
+                let ts = try String(contentsOf: s.url(for: format)!, encoding: .utf8)
+                if ta != ts { identical = false }
+            }
+            // Et les noms, eux, diffèrent bien.
+            let namesDiffer = a.url(for: .srt)!.lastPathComponent == "entretien_fr.srt"
+                && s.url(for: .srt)!.lastPathComponent == "entretien.srt"
+            check("N8. contenus identiques avec et sans suffixe (seul le nom change)",
+                  identical && namesDiffer)
+        } catch {
+            check("N8. indépendance contenu/nom", false, error.localizedDescription)
+        }
+
+        // --- N9 : le repli de dossier conserve le suffixe (BUG-007) ----------
+        do {
+            let c = makeCase("n9")
+            let absent = c.dir.appendingPathComponent("dossier-inexistant", isDirectory: true)
+            let out = try SubtitleExporter.export(
+                segments: segments, sourceURL: c.src,
+                formats: [.srt], outputDirectory: absent, languageCode: "es")
+            let url = out.url(for: .srt)!
+            check("N9. repli auprès de la source → suffixe conservé",
+                  url.lastPathComponent == "entretien_es.srt"
+                  && url.deletingLastPathComponent().standardizedFileURL.path
+                     == c.dir.standardizedFileURL.path,
+                  url.path)
+        } catch {
+            check("N9. repli avec suffixe", false, error.localizedDescription)
+        }
+
+        print("[selftest] bilan nommage par langue : \(total - failures)/\(total) OK")
+        return failures == 0 ? 0 : 8
     }
 
     /// Affiche le dossier de sortie EFFECTIF résolu par les réglages pour une source.
@@ -634,18 +782,22 @@ enum SelfTest {
             print("[selftest] wav temporaire : \(wav.lastPathComponent) (existe=\(exists(wav)))")
 
             // 2) Transcription
-            let segments = try await engine.transcribe(
+            let outcome = try await engine.transcribe(
                 wavURL: wav, modelPath: modelPath,
                 language: language, quality: .maximum
             ) { _ in }
+            let segments = outcome.segments
+            print("[selftest] langue du résultat : \(outcome.languageCode ?? "(non renseignée)")")
 
-            // 3) Export (dossier personnalisé si fourni via --out)
+            // 3) Export (dossier personnalisé si fourni via --out). Le nom porte
+            //    la langue du résultat — c'est le chemin réel, pas une simulation.
             if let outputDirectory {
                 print("[selftest] dossier de sortie : \(outputDirectory.path)")
             }
             let outputs = try SubtitleExporter.export(
                 segments: segments, sourceURL: input,
-                formats: [.srt, .txt], outputDirectory: outputDirectory
+                formats: [.srt, .txt], outputDirectory: outputDirectory,
+                languageCode: outcome.languageCode
             )
 
             // 4) Nettoyage du temporaire

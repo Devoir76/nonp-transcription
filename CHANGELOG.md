@@ -8,6 +8,15 @@ règle de versionnement : le tag Git est égal à `CFBundleShortVersionString`.
 
 Clarté de l'interface. Aucune évolution du moteur.
 
+### Ajouté
+- **Nom des exports suffixé par la langue** : chaque fichier porte le code ISO 639-1 de
+  la langue de l'audio avant son extension — `entretien_fr.srt`, `interview_en.txt`,
+  `entrevista_es.vtt`. Le code vient du résultat de transcription (langue détectée en
+  mode automatique, ou langue choisie), jamais de la demande. Langue indisponible : le
+  nom reste nu, sans placeholder. L'extension continue de distinguer le format
+  (ADR-0002), le suffixe distingue la langue ; l'anti-collision `_2`, `_3`… s'applique
+  au nom complet et n'écrase jamais un fichier existant. (ADR-0004)
+
 ### Modifié
 - **Sélecteur de langue clarifié** : le menu « Langue » pouvait se lire comme une cible
   de traduction. Il devient « **Langue de l'audio** », avec deux options explicites —
@@ -19,9 +28,10 @@ Clarté de l'interface. Aucune évolution du moteur.
   lieu d'être dessinée par code ; `Scripts/generate_icon.swift` est neutralisé pour
   ne plus l'écraser.
 
-> Fidélité : libellés et affichage seulement. Le moteur, les paramètres whisper-cli,
-> le parsing, les timecodes et l'export sont inchangés — le résultat de Whisper est
-> identique. La persistance du choix de langue (défaut « Auto ») est préservée.
+> Fidélité : rien de ce qui précède ne touche au texte transcrit. Le moteur, les
+> paramètres whisper-cli, le parsing, les timecodes et le contenu des fichiers exportés
+> sont inchangés — le résultat de Whisper est identique. Seul le **nom** des fichiers
+> de sortie évolue. La persistance du choix de langue (défaut « Auto ») est préservée.
 
 ## [1.2.0] — 2026-07-23
 

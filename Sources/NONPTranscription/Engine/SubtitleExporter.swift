@@ -44,12 +44,18 @@ enum SubtitleExporter {
     /// inaccessible ne doit pas la jeter. L'anti-collision est entièrement
     /// recalculée dans le dossier de repli.
     ///
+    /// `languageCode` est le code de langue du résultat de transcription : il
+    /// devient un suffixe du nom (`entretien_fr.srt`). Absent ou inexploitable,
+    /// le nom reste nu (`entretien.srt`). Il n'influe QUE sur le nom : les
+    /// contenus écrits sont rigoureusement les mêmes.
+    ///
     /// Renvoie les sorties réellement créées (format + URL), dans l'ordre des
     /// `formats` fournis — l'appelant ne doit donc jamais supposer qu'elles se
     /// trouvent dans `outputDirectory`.
     @discardableResult
     static func export(segments: [TranscriptSegment], sourceURL: URL,
-                       formats: [OutputFormat], outputDirectory: URL? = nil) throws
+                       formats: [OutputFormat], outputDirectory: URL? = nil,
+                       languageCode: String? = nil) throws
         -> [ExportedOutput] {
 
         // Précondition : au moins un format. L'UI le garantit (garde-fou), mais
@@ -60,7 +66,13 @@ enum SubtitleExporter {
         let fallback = sourceURL.deletingLastPathComponent()
         // Dossier cible : personnalisé si fourni, sinon le repli lui-même.
         let preferred = outputDirectory ?? fallback
-        let originalBase = sourceURL.deletingPathExtension().lastPathComponent
+        // Nom de base = nom de la source + suffixe de langue éventuel. Décidé en
+        // un seul endroit (ExportNaming), AVANT l'anti-collision : le suffixe
+        // numérique s'ajoute donc au nom complet (« entretien_fr_2.srt »), et
+        // les deux dossiers candidats ci-dessous partent du même nom.
+        let originalBase = ExportNaming.baseName(
+            source: sourceURL.deletingPathExtension().lastPathComponent,
+            languageCode: languageCode)
 
         // Contenus pré-générés (fonctions PURES des segments) + extensions concernées.
         let contents = formats.map { (format: $0, text: makeContent($0, segments)) }

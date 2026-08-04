@@ -128,7 +128,7 @@ final class TranscriptionCoordinator: ObservableObject {
             // 2) Transcription
             transcribeStartDate = Date()
             phase = .transcribing(fraction: 0)
-            let segments = try await engine.transcribe(
+            let outcome = try await engine.transcribe(
                 wavURL: wav,
                 modelPath: modelPath,
                 language: language,
@@ -143,9 +143,12 @@ final class TranscriptionCoordinator: ObservableObject {
             //    L'exportateur se replie auprès de la vidéo si ce dossier est
             //    devenu inaccessible : les URL renvoyées font foi.
             phase = .exporting
+            //    Le nom des fichiers porte la langue du résultat (suffixe
+            //    `_fr`, `_en`…) ; leur contenu, lui, est inchangé.
             let outputs = try SubtitleExporter.export(
-                segments: segments, sourceURL: sourceURL,
-                formats: formats, outputDirectory: outputDirectory
+                segments: outcome.segments, sourceURL: sourceURL,
+                formats: formats, outputDirectory: outputDirectory,
+                languageCode: outcome.languageCode
             )
 
             // 4) Nettoyage du temporaire + fin
