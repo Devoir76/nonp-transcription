@@ -70,6 +70,12 @@ de sortie n'est pas le contenu.
 - Le contenu des fichiers est rigoureusement identique avec ou sans suffixe —
   vérifié par assertion (SelfTest `--naming-cases`, N8).
 
+Le suffixe reflète la décision du moteur, y compris lorsqu'elle est fausse : une
+détection erronée produit un nom erroné (observé sur un échantillon espagnol de 3 s
+détecté fr avec p = 0,99). Conditionner le suffixe à la langue choisie, ou à un seuil
+de confiance, a été envisagé et écarté — la détection est fiable sur du contenu réel,
+et un nom se corrige sans relancer la transcription.
+
 ## Alternatives écartées
 
 - **`<base>.<code>.<ext>`** (style sous-titres, `film.fr.srt`) : convention
