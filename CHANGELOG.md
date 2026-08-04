@@ -4,7 +4,7 @@ Toutes les évolutions notables de NONP Transcription.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/) ;
 règle de versionnement : le tag Git est égal à `CFBundleShortVersionString`.
 
-## [1.2.1] — en cours
+## [1.2.1] — 2026-08-04
 
 Clarté de l'interface. Aucune évolution du moteur.
 
