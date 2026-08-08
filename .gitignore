@@ -18,6 +18,10 @@ ggml-*.bin
 *.txt
 # (exception : on garde les éventuels fichiers de documentation .txt volontaires)
 !LICENSE.txt
+# Liste figée des décodeurs audio du FFmpeg embarqué. Versionnée
+# OBLIGATOIREMENT : Scripts/build_ffmpeg_lgpl.sh en dépend, et sans elle le
+# build n'est plus reproductible — donc l'obligation LGPL §4 n'est plus tenue.
+!Scripts/ffmpeg-audio-decoders.txt
 
 # ===== Médias source (jamais versionnés) =====
 # Vidéos et audio déposés/transcrits : ne doivent jamais entrer dans le dépôt.
