@@ -89,16 +89,33 @@ if [[ -f "$PROJECT_ROOT/Resources/nonp_header_logo.png" ]]; then
 fi
 
 # --- 2b) Binaires embarqués (ffmpeg + whisper.cpp) -----------------------
-# On place les outils dans Resources/bin et leurs bibliothèques dans
-# Resources/lib. ffmpeg a été relocalisé (dylibbundler) pour chercher ses
-# bibliothèques via @executable_path/../lib : depuis Resources/bin, cela
-# pointe vers Resources/lib. La structure bin/lib côte à côte est donc requise.
+# Les deux outils sont liés STATIQUEMENT : il suffit de les copier dans
+# Resources/bin. Ils ne dépendent que de frameworks Apple et de libz du système.
+#
+# Historique (ADR-0005) : jusqu'à la V1.2.1, ffmpeg était un binaire dynamique
+# accompagné de 18 dylibs dans Resources/lib, relocalisées par dylibbundler vers
+# @executable_path/../lib. Le passage à un ffmpeg LGPL statique a supprimé le
+# dossier lib/ (37 Mo) et toute l'étape de relocalisation. Ne pas les réintroduire
+# sans revenir sur l'ADR : la structure bin/lib côte à côte n'est plus requise.
 if [[ -d "$PROJECT_ROOT/Vendor/bin" ]]; then
     echo "▸ Copie des binaires embarqués (ffmpeg + whisper)…"
-    mkdir -p "$APP_BUNDLE/Contents/Resources/bin" "$APP_BUNDLE/Contents/Resources/lib"
+    mkdir -p "$APP_BUNDLE/Contents/Resources/bin"
     cp "$PROJECT_ROOT/Vendor/bin/"* "$APP_BUNDLE/Contents/Resources/bin/"
-    cp "$PROJECT_ROOT/Vendor/lib/"*.dylib "$APP_BUNDLE/Contents/Resources/lib/" 2>/dev/null || true
     chmod +x "$APP_BUNDLE/Contents/Resources/bin/"*
+
+    # Garde-fou : une dépendance dynamique NON système signalerait un binaire
+    # mal construit (retour à un ffmpeg dynamique, dylib oubliée…). Le bundle
+    # serait alors cassé chez l'utilisateur, mais fonctionnel sur cette machine —
+    # panne invisible ici, d'où la vérification au build.
+    for tool in "$APP_BUNDLE/Contents/Resources/bin/"*; do
+        if otool -L "$tool" | tail -n +2 \
+             | grep -vE '/usr/lib/|/System/Library/' | grep -q .; then
+            echo "✗ $(basename "$tool") dépend d'une bibliothèque non système :" >&2
+            otool -L "$tool" | tail -n +2 | grep -vE '/usr/lib/|/System/Library/' >&2
+            exit 1
+        fi
+    done
+    echo "  ✓ binaires autonomes (frameworks Apple + libz uniquement)"
 else
     echo "  ⚠️  Vendor/bin introuvable — build sans moteur embarqué (interface seule)."
 fi
