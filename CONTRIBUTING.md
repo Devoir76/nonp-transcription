@@ -1,7 +1,7 @@
 # Contribuer à NONP Transcription
 
 Merci de l'intérêt que vous portez au projet. NONP Transcription est un logiciel **libre et open source**
-(GPL-3.0-or-later), né du projet mémoriel NONP.
+(MPL-2.0), né du projet mémoriel NONP.
 
 ## Signaler un bug ou proposer une idée
 Ouvrez une *issue* en décrivant le problème (ou l'idée), votre version de macOS, et — pour un bug — les
@@ -24,7 +24,7 @@ Toute contribution doit préserver les invariants du produit :
 
 ## Certificat d'origine (DCO)
 Ce projet utilise le **Developer Certificate of Origin**. En signant vos commits, vous certifiez que vous
-avez le droit de soumettre votre contribution sous la licence du projet (GPL-3.0-or-later).
+avez le droit de soumettre votre contribution sous la licence du projet (MPL-2.0).
 
 Signez vos commits avec l'option `-s` :
 
@@ -37,4 +37,4 @@ https://developercertificate.org.
 
 ## Licence
 En contribuant, vous acceptez que votre contribution soit distribuée sous la licence du projet,
-**GPL-3.0-or-later**.
+**MPL-2.0**.

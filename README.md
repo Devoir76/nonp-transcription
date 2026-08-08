@@ -57,8 +57,8 @@ seule connexion réseau est le **téléchargement initial du modèle**. Ensuite,
 hors ligne.
 
 ## Licence
-NONP Transcription est distribué sous **GNU GPL v3 ou ultérieure** (voir [`LICENSE`](LICENSE)). Il embarque
-FFmpeg (GPLv3), whisper.cpp (MIT) et le modèle Whisper (MIT) — voir
+NONP Transcription est distribué sous **MPL-2.0** (voir [`LICENSE`](LICENSE)). Il embarque
+FFmpeg (LGPL-2.1 ou ultérieure), whisper.cpp (MIT) et le modèle Whisper (MIT) — voir
 [`THIRD_PARTY_NOTICES`](THIRD_PARTY_NOTICES.md).
 
 ## Construire depuis les sources
