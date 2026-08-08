@@ -141,10 +141,14 @@ binaire équivalent. Cette obligation est remplie ainsi :
    binaire fonctionnellement équivalent, à partir de sources FFmpeg modifiées si
    l'utilisateur le souhaite.
 
-> **Source hébergée : [à compléter]**
-> Une copie de l'archive source amont sera déposée avec le paquet de
-> distribution. L'URL sera renseignée ici à l'étape de mise en ligne — voir
-> [`third_party/ffmpeg/README.md`](third_party/ffmpeg/README.md).
+> **Source hébergée : https://nonp.fr/transcription** — section « Licences ».
+> Une copie de l'archive source FFmpeg 8.1.2 y est mise à disposition, aux côtés
+> du paquet de l'application, afin que la source reste accessible même si l'amont
+> devient injoignable.
+>
+> La source amont, son empreinte SHA-256 et la recette complète de reconstruction
+> restent décrites dans [`docs/BUILDING_FFMPEG.md`](docs/BUILDING_FFMPEG.md) —
+> voir aussi [`third_party/ffmpeg/README.md`](third_party/ffmpeg/README.md).
 
 ### Texte de licence
 

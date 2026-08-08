@@ -29,10 +29,11 @@ Contexte et justification de la stratégie de build :
 | SHA-256 | `464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c` |
 | Dépôt | https://git.ffmpeg.org/ffmpeg.git (tag `n8.1.2`) |
 
-> **Copie archivée — source hébergée : [à compléter]**
-> Une copie de cette archive sera déposée à côté du paquet de distribution, afin
-> que la source reste disponible même si l'amont devient inaccessible.
-> Emplacement et procédure : [`../third_party/ffmpeg/README.md`](../third_party/ffmpeg/README.md).
+> **Copie archivée — source hébergée : https://nonp.fr/transcription**
+> (section « Licences »). Une copie de cette archive y est publiée avec le paquet
+> de l'application, afin que la source reste disponible même si l'amont devient
+> inaccessible.
+> Suivi du dépôt : [`../third_party/ffmpeg/README.md`](../third_party/ffmpeg/README.md).
 
 ## Reconstruire
 

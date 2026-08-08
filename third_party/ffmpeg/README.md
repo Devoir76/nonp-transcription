@@ -3,44 +3,47 @@
 Ce dossier accueillera la **copie archivée de l'archive source FFmpeg** utilisée
 pour construire le binaire redistribué, au titre de l'obligation **LGPL-2.1 §4**.
 
-## État : emplacement réservé, archive non encore déposée
+## Hébergement retenu
 
 | | |
 |---|---|
-| Fichier attendu | `ffmpeg-8.1.2.tar.xz` |
+| Fichier | `ffmpeg-8.1.2.tar.xz` |
 | Taille | ~11,7 Mo |
 | SHA-256 | `464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c` |
 | URL amont | https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz |
-| **Source hébergée** | **[à compléter]** |
+| **Source hébergée** | **https://nonp.fr/transcription** — section « Licences » |
 
-L'archive et l'URL de l'offre écrite se décident à l'**étape paquet**, parce
-qu'elles dépendent de l'hébergement retenu pour le ZIP de l'application.
+L'archive est publiée **avec le paquet de l'application**, sur la page stable
+`nonp.fr/transcription`. Le dépôt ne porte donc pas les 11,7 Mo de l'archive :
+ce dossier ne garde qu'un pointeur, et la recette de reconstruction vit dans
+[`../../docs/BUILDING_FFMPEG.md`](../../docs/BUILDING_FFMPEG.md).
 
-## Décision en attente : où vit l'archive
+Contrepartie assumée : **le lien doit rester vivant aussi longtemps que le
+binaire est distribué** — c'est ce qu'exige la LGPL. Toute refonte de
+`nonp.fr` doit préserver cette URL, ou mettre à jour les deux emplacements
+ci-dessous.
 
-Deux options, à trancher avec l'hébergement du paquet :
+## Reste à faire à l'étape paquet
 
-1. **Dans le dépôt** (ici même). La source voyage avec le code, rien à
-   maintenir. Coût : +11,7 Mo dans l'historique Git, définitivement.
-2. **À côté du paquet distribué** (même hébergement que le ZIP), ce dossier ne
-   gardant qu'un pointeur. Dépôt léger, mais un lien à maintenir vivant — et la
-   LGPL demande que la source reste disponible aussi longtemps que le binaire
-   est distribué.
+- [ ] Déposer l'archive à l'adresse ci-dessus, en même temps que le ZIP de
+      l'application — **la page `nonp.fr/transcription` n'existe pas encore**.
+- [ ] Vérifier que l'URL sert bien le fichier et que son empreinte correspond.
 
-Tant que la décision n'est pas prise, la conformité repose sur
-[`../../docs/BUILDING_FFMPEG.md`](../../docs/BUILDING_FFMPEG.md) : il donne la
-version exacte, l'URL amont, l'empreinte SHA-256, la ligne `configure` et le
-script de build. C'est suffisant tant que l'amont reste accessible ; la copie
-archivée est la garantie qui rend l'obligation indépendante de l'amont.
-
-## Quand l'archive sera déposée
+Tant que ce dépôt n'est pas fait, la conformité repose sur
+[`../../docs/BUILDING_FFMPEG.md`](../../docs/BUILDING_FFMPEG.md) — version
+exacte, URL amont, empreinte SHA-256, ligne `configure` et script de build —
+ce qui suffit tant que l'amont FFmpeg reste accessible. La copie archivée est la
+garantie qui rend l'obligation **indépendante** de l'amont.
 
 ```sh
-curl -fL -o third_party/ffmpeg/ffmpeg-8.1.2.tar.xz \
-  https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
-shasum -a 256 third_party/ffmpeg/ffmpeg-8.1.2.tar.xz
+curl -fL -o ffmpeg-8.1.2.tar.xz https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz
+shasum -a 256 ffmpeg-8.1.2.tar.xz
 # doit afficher 464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c
 ```
 
-Renseigner ensuite « Source hébergée » ici **et** dans
-[`../../THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md).
+## Les deux emplacements à tenir à jour
+
+Si l'URL change, corriger **les deux** :
+
+1. ce fichier (table ci-dessus) ;
+2. [`../../THIRD_PARTY_NOTICES.md`](../../THIRD_PARTY_NOTICES.md), section FFmpeg.
