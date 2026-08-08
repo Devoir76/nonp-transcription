@@ -1,6 +1,6 @@
 # ADR-0003 — Licence du projet : GPL-3.0-or-later
 
-- **Statut** : Accepté
+- **Statut** : **Superseded by [ADR-0005](0005-ffmpeg-lgpl-et-licence-mpl.md)** (2026-08-08)
 - **Date** : 2026-07-23
 - **Déclencheur** : préparation de la publication open source. La reco initiale
   (mémoire active / roadmap) était **MPL-2.0** ; l'audit du FFmpeg embarqué la
