@@ -4,6 +4,32 @@ Toutes les évolutions notables de NONP Transcription.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/) ;
 règle de versionnement : le tag Git est égal à `CFBundleShortVersionString`.
 
+## [1.2.2] — 2026-08-08
+
+Licence et composants embarqués. **Aucun changement fonctionnel.**
+
+### Modifié
+- **FFmpeg reconstruit en LGPL-2.1 ou ultérieure** : binaire **statique**, sans aucun
+  composant GPL (`--disable-gpl`, sans `--enable-version3`) et sans codec vidéo —
+  l'application n'a jamais décodé de vidéo, elle n'extrait que l'audio. Les 18
+  bibliothèques dynamiques embarquées (dont x264 et x265, qui imposaient la GPL)
+  disparaissent : il ne reste qu'un exécutable ne dépendant que de frameworks Apple et
+  de `libz` du système. La couverture des décodeurs audio est **identique** à celle de
+  la 1.2.1. (ADR-0005)
+- **Licence du projet passée en MPL-2.0**, que le point précédent rend possible.
+  `THIRD_PARTY_NOTICES` réécrit sur les seuls composants réellement redistribués.
+- **Taille du bundle : 42 Mo → 9,8 Mo** (archive de distribution ≈ 4,3 Mo).
+
+### Ajouté
+- **`docs/BUILDING_FFMPEG.md`** et **`Scripts/build_ffmpeg_lgpl.sh`** : source
+  correspondante et build reproductible du FFmpeg embarqué, au titre de l'obligation
+  LGPL-2.1 §4 (droit de relink).
+
+> Fidélité : l'extraction audio transmise à Whisper est **identique bit à bit** à celle
+> de la 1.2.1, vérifiée par comparaison SHA-256 des WAV produits sur MP4, MOV, AVI, MKV,
+> MP3, WAV, M4A et sur des MKV à pistes AC-3, DTS et Opus. Transcription, timecodes,
+> formats d'export et interface sont inchangés. Non-régression : 67/67.
+
 ## [1.2.1] — 2026-08-04
 
 Clarté de l'interface. Aucune évolution du moteur.

@@ -29,10 +29,10 @@
 
     <!-- Version affichée dans la fenêtre « À propos ». -->
     <key>CFBundleShortVersionString</key>
-    <string>1.2.1</string>
+    <string>1.2.2</string>
 
     <key>CFBundleVersion</key>
-    <string>6</string>
+    <string>7</string>
 
     <!-- macOS 14 minimum, cohérent avec Package.swift -->
     <key>LSMinimumSystemVersion</key>
