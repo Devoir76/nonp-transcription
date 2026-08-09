@@ -4,6 +4,28 @@ Toutes les évolutions notables de NONP Transcription.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/) ;
 règle de versionnement : le tag Git est égal à `CFBundleShortVersionString`.
 
+## [1.2.3] — 2026-08-09
+
+Conformité des licences. **Aucun changement fonctionnel.**
+
+### Ajouté
+- **Textes de licence embarqués dans le bundle** (`Contents/Resources/Licenses/`) :
+  `LICENSE` (MPL-2.0), `COPYING.LGPLv2.1` (texte complet de la LGPL-2.1, repris des
+  sources FFmpeg 8.1.2) et `THIRD_PARTY_NOTICES.md`. Jusqu'à la 1.2.2 incluse, ces
+  textes ne vivaient que dans le dépôt et sur la page de téléchargement : l'archive
+  distribuée n'en contenait aucun, alors que l'avis interne du binaire FFmpeg
+  (`ffmpeg -L`) renvoie explicitement à une copie que l'utilisateur « doit avoir
+  reçue ». La source correspondante de FFmpeg, elle, était déjà publiée (LGPL-2.1 §4).
+- **Garde-fou au build** : `Scripts/build_app.sh` échoue si l'un des trois textes est
+  manquant ou vide, ou si `Contents/Resources/Licenses/` finit vide. Les fichiers du
+  dépôt restent l'unique source de vérité — aucune copie n'est maintenue en parallèle.
+
+> Fidélité : aucune ligne de code applicatif ne change. Moteur, paramètres
+> whisper-cli, extraction FFmpeg, parsing, timecodes, formats d'export et interface
+> sont identiques à la 1.2.2. Les binaires embarqués sont **identiques au bit près**
+> à ceux de la 1.2.2 publiée (`ffmpeg` `660f3b68…`, `whisper-cli` `9c950af9…`),
+> vérifié par comparaison SHA-256 avec l'archive en ligne. Non-régression : 67/67.
+
 ## [1.2.2] — 2026-08-08
 
 Licence et composants embarqués. **Aucun changement fonctionnel.**
