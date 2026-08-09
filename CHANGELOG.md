@@ -18,7 +18,7 @@ Licence et composants embarqués. **Aucun changement fonctionnel.**
   la 1.2.1. (ADR-0005)
 - **Licence du projet passée en MPL-2.0**, que le point précédent rend possible.
   `THIRD_PARTY_NOTICES` réécrit sur les seuls composants réellement redistribués.
-- **Taille du bundle : 42 Mo → 9,8 Mo** (archive de distribution ≈ 4,3 Mo).
+- **Taille du bundle : 42 Mo → 9,8 Mo** (archive de distribution 4,7 Mo).
 
 ### Ajouté
 - **`docs/BUILDING_FFMPEG.md`** et **`Scripts/build_ffmpeg_lgpl.sh`** : source

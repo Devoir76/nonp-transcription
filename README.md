@@ -6,8 +6,9 @@ Application macOS **libre et open source** qui transcrit vos fichiers **audio et
 sous-titres (TXT, SRT, VTT), **entièrement sur votre Mac**. Aucune donnée n'est envoyée sur Internet,
 aucun abonnement, aucune limite de durée.
 
-Elle repose sur [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (modèle Whisper *large-v3*,
-accéléré par Metal) et [FFmpeg](https://ffmpeg.org), tous deux embarqués dans l'application.
+Elle repose sur [whisper.cpp](https://github.com/ggerganov/whisper.cpp) (modèle Whisper *large-v3*
+par défaut, ou *large-v3-turbo*, accélérés par Metal) et [FFmpeg](https://ffmpeg.org), tous deux
+embarqués dans l'application.
 
 > **Pourquoi « open source » compte ici.** Le code est public : n'importe qui peut vérifier que la
 > transcription se fait **100 % localement** et que **rien ne quitte votre Mac**. Pour des enregistrements
@@ -18,6 +19,7 @@ accéléré par Metal) et [FFmpeg](https://ffmpeg.org), tous deux embarqués dan
 - **Transcription locale** d'audio et de vidéo (MP4, MOV, MKV, AVI, MP3, WAV, M4A).
 - **Formats de sortie** au choix : **TXT** (texte), **SRT** et **VTT** (sous-titres horodatés).
 - **Langue** : détection automatique ou choix explicite (mémorisé).
+- **Qualité** : « Qualité maximale » (*large-v3*, par défaut) ou « Rapide » (*large-v3-turbo*).
 - **Fidélité** : le texte produit par Whisper n'est jamais réécrit ni reformulé.
 - **Intégrité des modèles** : empreinte SHA-256 vérifiée (un modèle corrompu est refusé).
 - **Sans abonnement, sans limite de durée, 100 % hors ligne** une fois le modèle installé.
@@ -25,7 +27,8 @@ accéléré par Metal) et [FFmpeg](https://ffmpeg.org), tous deux embarqués dan
 ## Prérequis
 - **macOS 14 (Sonoma)** ou plus récent.
 - **Mac Apple Silicon (M1 ou plus récent).**
-- Environ 3 Go d'espace disque pour le modèle (téléchargé une seule fois au premier lancement).
+- Environ **3,1 Go** d'espace disque pour le modèle (téléchargé une seule fois au premier lancement),
+  ou **1,6 Go** avec le préréglage « Rapide ».
 
 ## Installation
 1. Téléchargez la dernière version depuis **[nonp.fr](https://nonp.fr/)** (fichier `.zip`).
@@ -43,8 +46,9 @@ accéléré par Metal) et [FFmpeg](https://ffmpeg.org), tous deux embarqués dan
    ```
    shasum -a 256 "NONP Transcription.zip"
    ```
-5. Au premier lancement, l'application télécharge le modèle de transcription (~2,9 Go) **une seule fois**.
-   Ensuite, tout fonctionne **hors ligne**.
+5. Au premier lancement, l'application télécharge le modèle de transcription **une seule fois** :
+   **~3,1 Go** pour « Qualité maximale » (*large-v3*, réglage par défaut), **~1,6 Go** pour « Rapide »
+   (*large-v3-turbo*). Ensuite, tout fonctionne **hors ligne**.
 
 ## Utilisation
 1. Glissez un fichier audio ou vidéo dans la fenêtre.
