@@ -56,7 +56,7 @@ Ordre impératif :
    activée). Ce test vérifie les défauts, pas une reprise de réglages inexistants.
 6. [ ] **Reconnaissance du modèle existant** : le modèle déjà téléchargé
    (`~/Library/Application Support/NONP Transcription/Models/`) est reconnu ;
-   **aucun téléchargement de 2,9 Go** n'est déclenché.
+   **aucun téléchargement de 3,1 Go** n'est déclenché.
 
 Test séparé (persistance des nouveaux réglages) :
 

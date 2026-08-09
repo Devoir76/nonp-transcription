@@ -116,7 +116,7 @@ utilisateur, aucune utilisation du Terminal.
 | **FFmpeg** | 8.1.2 | Extraction/conversion audio (→ WAV 16 kHz mono) | `Contents/Resources/bin/ffmpeg` (+ `lib/`) |
 | **Modèle Whisper** | `ggml-large-v3.bin` (3 095 033 483 octets) | Poids du modèle | **hors de l'app** (voir plus bas) |
 
-> Le modèle n'est pas embarqué (≈ 2,9 Go) : il est téléchargé une seule fois
+> Le modèle n'est pas embarqué (≈ 3,1 Go) : il est téléchargé une seule fois
 > au premier usage, depuis le dépôt officiel Hugging Face
 > `ggerganov/whisper.cpp`.
 
@@ -124,8 +124,8 @@ Modèles utilisés selon la qualité choisie :
 
 | Qualité | Modèle | Taille | Décodage |
 |---|---|---|---|
-| **Qualité maximale** (défaut) | `large-v3` | 2,88 Go | beam search (`-bs 5`) |
-| **Rapide** | `large-v3-turbo` | 1,51 Go | glouton (greedy) |
+| **Qualité maximale** (défaut) | `large-v3` | 3,1 Go | beam search (`-bs 5`) |
+| **Rapide** | `large-v3-turbo` | 1,6 Go | glouton (greedy) |
 
 Outils requis :
 - **Pour compiler l'application** : uniquement les **Command Line Tools**
