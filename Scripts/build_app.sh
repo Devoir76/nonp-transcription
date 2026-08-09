@@ -120,6 +120,44 @@ else
     echo "  ⚠️  Vendor/bin introuvable — build sans moteur embarqué (interface seule)."
 fi
 
+# --- 2c) Textes de licence embarqués -------------------------------------
+# Obligation LGPL-2.1 §4 : le binaire FFmpeg redistribué doit être accompagné du
+# texte de sa licence — son propre avis interne (« ffmpeg -L ») renvoie d'ailleurs
+# à une copie que l'utilisateur doit avoir reçue. Jusqu'à la 1.2.2 incluse, ces
+# textes ne vivaient que dans le dépôt et sur la page de téléchargement : le ZIP
+# distribué n'en contenait aucun.
+#
+# Source de vérité = les fichiers du dépôt, copiés ici au build. Aucune copie
+# n'est maintenue dans Resources/ : elle divergerait en silence.
+echo "▸ Copie des textes de licence…"
+LICENSES_DST="$APP_BUNDLE/Contents/Resources/Licenses"
+mkdir -p "$LICENSES_DST"
+
+# « chemin source dans le dépôt : nom dans le bundle »
+LICENSE_FILES=(
+    "LICENSE:LICENSE"
+    "Licenses/COPYING.LGPLv2.1:COPYING.LGPLv2.1"
+    "THIRD_PARTY_NOTICES.md:THIRD_PARTY_NOTICES.md"
+)
+for entry in "${LICENSE_FILES[@]}"; do
+    src="$PROJECT_ROOT/${entry%%:*}"
+    dst="$LICENSES_DST/${entry##*:}"
+    if [[ ! -s "$src" ]]; then
+        echo "✗ Texte de licence manquant ou vide : ${entry%%:*}" >&2
+        echo "  Le bundle ne peut pas être distribué sans lui (LGPL-2.1 §4)." >&2
+        exit 1
+    fi
+    cp "$src" "$dst"
+done
+
+# Garde-fou final : un dossier absent ou vide arrête la build. Sans lui, une
+# erreur de chemin produirait un bundle non conforme, silencieusement.
+if [[ ! -d "$LICENSES_DST" || -z "$(ls -A "$LICENSES_DST")" ]]; then
+    echo "✗ Contents/Resources/Licenses absent ou vide — build interrompue." >&2
+    exit 1
+fi
+echo "  ✓ ${#LICENSE_FILES[@]} textes de licence embarqués"
+
 # --- 3) Signature ad-hoc --------------------------------------------------
 # Signature locale « ad-hoc » : suffisante pour un usage personnel quotidien,
 # évite les blocages Gatekeeper au lancement local. (Pas de compte développeur requis.)
