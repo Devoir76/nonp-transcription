@@ -34,6 +34,30 @@ effectuer avant de poser un tag de version. Aucune automatisation ici.
       identifié sans ambiguïté
 - [ ] Tag **`v1.2.1`** posé exactement sur ce commit
 
+## Publication sur nonp.fr (après le tag)
+
+Le dépôt et le site sont deux endroits distincts : un tag posé ne publie rien. À
+dérouler dans cet ordre, **en une seule fois** — un site qui annonce une version
+et en sert une autre est pire que pas de mise à jour du tout.
+
+- [ ] Archive produite avec `ditto -c -k --sequesterRsrc --keepParent`, nommée
+      `NONP-Transcription-<version>.zip`.
+- [ ] Empreinte SHA-256 calculée sur l'archive **réellement déposée**.
+- [ ] Archive copiée dans `_artefacts-transcription/` **et** dans le dossier servi
+      (`nonp-unified-deploy/transcription/`).
+- [ ] `SHA256SUMS.txt` mis à jour — **conserver la ligne de `ffmpeg-8.1.2.tar.xz`**,
+      qui reste la source correspondante LGPL du binaire embarqué.
+- [ ] **Alias `-latest` repointé** dans `_redirects` vers la nouvelle version
+      (`/transcription/NONP-Transcription-latest.zip` → l'archive courante). Oublier
+      cette ligne laisse l'alias servir silencieusement la version précédente.
+- [ ] Page `transcription.html` : version affichée, nom du fichier (lien **et**
+      `aria-label` **et** texte du bouton), poids, empreinte SHA-256, et le bloc
+      JSON-LD (`softwareVersion`, `downloadUrl`, `fileSize`).
+- [ ] Après déploiement : re-télécharger l'archive **depuis nonp.fr** et vérifier que
+      son empreinte correspond à celle annoncée sur la page.
+- [ ] Retirer l'archive de la version précédente du dossier servi ; son empreinte
+      reste documentée dans le CHANGELOG.
+
 ## Test de mise à niveau depuis V1.0 (release production uniquement)
 
 À exécuter sur le `.app` de release (`--release`, identifiant
