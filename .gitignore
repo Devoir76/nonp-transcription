@@ -70,6 +70,9 @@ config.local.*
 .claude/
 CLAUDE.md
 
+# Brouillons de décision internes (non publiés ; purgés de l'historique le 2026-08-12)
+docs/decision-drafts/
+
 # ===== Éditeurs / IDE =====
 .vscode/
 .idea/
