@@ -1,7 +1,8 @@
 # ADR-0005 — FFmpeg reconstruit en LGPL, licence du projet en MPL-2.0
 
-- **Statut** : Proposé — **ligne `configure` validée et build de vérification réussi**
-  (2026-08-08, en scratchpad, hors dépôt). En attente de validation avant intégration.
+- **Statut** : **Accepté** (2026-08-09) — décision exécutée : binaire LGPL statique
+  intégré et licence MPL-2.0 en place (v1.2.2) ; textes de licence embarqués dans le
+  bundle (v1.2.3).
 - **Date** : 2026-08-08
 - **Supersède** : [ADR-0003](0003-licence-gplv3.md) (Licence du projet : GPL-3.0-or-later)
 - **Déclencheur** : préparation de la page de téléchargement sur `nonp.fr`. L'audit
@@ -353,14 +354,15 @@ filet si la campagne de test s'éternise.
    later ».
 2. ~~Build et mesure de taille réelle~~ — **fait le 2026-08-08** (scratchpad, hors
    dépôt) : 5,15 Mo, bundle 9,8 Mo, ZIP 4,3 Mo, smoke test 9/9 identiques.
-3. **Intégration** dans `Vendor/` + adaptation de `Scripts/build_app.sh` (retrait
-   de l'étape `dylibbundler` et du dossier `lib/`) — **en attente de validation**.
-4. Campagne de non-régression : 58/58 **et** les 7 formats sur médias réels, plus
-   des MKV à pistes AC-3, DTS et Opus.
-5. Bascule `LICENSE` en MPL-2.0, reprise des en-têtes de fichiers, ajout du texte
-   LGPL-2.1 pour FFmpeg.
-6. `THIRD_PARTY_NOTICES` refait sur les composants réellement restants (`libmpg123`
-   notamment disparaît avec les dylibs).
-7. Mise en place de l'offre de source FFmpeg sur la page de téléchargement.
-8. **En parallèle et sans dépendance** : DCO dans `CONTRIBUTING.md`, à mettre en
-   place avant l'ouverture du dépôt public.
+3. ~~Intégration dans `Vendor/` + adaptation de `Scripts/build_app.sh`~~ — **fait
+   (v1.2.2)** : binaire statique intégré, étape `dylibbundler` et dossier `lib/` retirés.
+4. ~~Campagne de non-régression~~ — **fait (v1.2.2)** : WAV identiques par SHA-256
+   sur les 7 formats et sur MKV à pistes AC-3, DTS et Opus (voir CHANGELOG 1.2.2).
+5. ~~Bascule `LICENSE` en MPL-2.0~~ — **fait (v1.2.2)** ; texte LGPL-2.1 embarqué
+   dans le bundle — **fait (v1.2.3)** ; en-têtes MPL-2.0 par fichier — **fait
+   (2026-08-12)**.
+6. ~~`THIRD_PARTY_NOTICES` refait~~ — **fait (v1.2.2)**.
+7. Offre de source FFmpeg sur **les deux canaux** : assets de la GitHub Release
+   (archive + SHA-256) et page `nonp.fr` (SHA256SUMS conserve la ligne de l'archive
+   — voir la procédure dans `docs/release-checklist.md`).
+8. ~~DCO dans `CONTRIBUTING.md`~~ — **fait (v1.2.0)**.

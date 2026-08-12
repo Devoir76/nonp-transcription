@@ -98,8 +98,10 @@ toujours coïncider**. Toute divergence bloque la release jusqu'à correction.
 
 Fait, sans justification rétroactive :
 
-Le tag `v1.0.0` pointe vers le commit `68c5d09877c6b152a70678c47fedc6c7d024d788`,
-dont le binaire affiche `CFBundleShortVersionString = 0.1.0` (build `1`). Le nom du
+Le tag `v1.0.0` pointe vers le commit `e75a28de2ac58f43b57b35cc9cba79f8a2c874bf`
+(SHA issu de la réécriture d'historique du 2026-08-12 — purge des anciennes dylibs
+GPL, harmonisation des auteurs ; l'ancien SHA `68c5d098` n'existe plus), dont le
+binaire affiche `CFBundleShortVersionString = 0.1.0` (build `1`). Le nom du
 tag et la version interne de l'application **ne coïncident pas**.
 
 Il s'agit d'une **omission au moment du tag**. Elle n'est **pas** corrigée, afin de
