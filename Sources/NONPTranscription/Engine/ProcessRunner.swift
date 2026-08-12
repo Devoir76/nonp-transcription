@@ -1,3 +1,6 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // ProcessRunner.swift — exécution d'un sous-processus avec lecture ligne par ligne.
 //
 // Base commune à l'extraction (ffmpeg) et à la transcription (whisper-cli).

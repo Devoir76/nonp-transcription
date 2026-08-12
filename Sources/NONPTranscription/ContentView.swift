@@ -1,3 +1,6 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // ContentView.swift — vue principale, assemble toute l'interface (Étape 1).
 //
 // Compose : en-tête · (zone de dépôt OU carte fichier) · message d'erreur

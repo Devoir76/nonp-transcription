@@ -1,3 +1,6 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // FileHasher.swift — empreinte SHA-256 d'un fichier, calculée par blocs.
 //
 // Ne charge JAMAIS le fichier entier en mémoire (les modèles pèsent des Go) :

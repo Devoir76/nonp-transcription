@@ -1,3 +1,6 @@
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // MediaFileLoader.swift — lecture des métadonnées d'un fichier (taille + durée).
 //
 // Séparé de MediaFile pour garder le modèle « pur ». La lecture de durée passe

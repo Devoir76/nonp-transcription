@@ -1,4 +1,7 @@
 #!/bin/bash
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https:#mozilla.org/MPL/2.0/.
 # test_bug007.sh — repli du dossier de sortie (BUG-007, BUG-008)
 #                  + persistance des réglages (BUG-006).
 #

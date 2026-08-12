@@ -1,4 +1,7 @@
 #!/bin/bash
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https:#mozilla.org/MPL/2.0/.
 # build_app.sh — compile l'app avec SwiftPM et l'assemble en bundle .app.
 #
 # Pourquoi ce script ? Sans Xcode complet, SwiftPM produit seulement un binaire

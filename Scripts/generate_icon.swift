@@ -1,4 +1,7 @@
 #!/usr/bin/env swift
+// This Source Code Form is subject to the terms of the Mozilla Public
+// License, v. 2.0. If a copy of the MPL was not distributed with this
+// file, You can obtain one at https://mozilla.org/MPL/2.0/.
 // generate_icon.swift — NEUTRALISÉ (script historique, conservé pour mémoire).
 //
 // Il générait l'icône de la V1.0 à la V1.2 : un carré arrondi bleu-ardoise
