@@ -4,6 +4,23 @@ Toutes les évolutions notables de NONP Transcription.
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/) ;
 règle de versionnement : le tag Git est égal à `CFBundleShortVersionString`.
 
+## [Non publié]
+
+Finalisation de la publication open source. **Aucun changement fonctionnel.**
+
+### Modifié
+- **Historique git réécrit** (2026-08-12, avant toute contribution externe — 0 fork) :
+  purge des anciennes bibliothèques FFmpeg GPL (~37 Mo) et des brouillons internes,
+  harmonisation de l'identité d'auteur, retrait des mentions d'outillage dans les
+  messages de commit. **Tous les SHA et tags ont changé** ; l'arbre des fichiers est
+  inchangé. Sauvegarde intégrale conservée hors dépôt.
+- **ADR-0005 accepté** : MPL-2.0 définitive, exécution consignée.
+- **Distribution sur deux canaux** : GitHub Releases (ZIP + source FFmpeg + SHA-256
+  en assets) et nonp.fr — README, `third_party/ffmpeg/` et checklist alignés.
+
+### Ajouté
+- **En-têtes MPL-2.0** (Exhibit A) sur l'ensemble des sources Swift et scripts.
+
 ## [1.2.3] — 2026-08-09
 
 Conformité des licences. **Aucun changement fonctionnel.**
