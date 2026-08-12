@@ -34,6 +34,18 @@ effectuer avant de poser un tag de version. Aucune automatisation ici.
       identifié sans ambiguïté
 - [ ] Tag **`v1.2.1`** posé exactement sur ce commit
 
+## Release GitHub (après le tag)
+
+Socle de distribution pérenne, complémentaire de nonp.fr — l'un des deux canaux
+doit toujours servir la source correspondante FFmpeg (LGPL §4).
+
+- [ ] Release créée sur le tag de version, avec en assets : l'archive ZIP
+      **réellement validée**, `ffmpeg-8.1.2.tar.xz` (source correspondante,
+      SHA-256 : voir `docs/BUILDING_FFMPEG.md`) et `SHA256SUMS.txt`.
+- [ ] Empreintes vérifiées après téléversement (re-télécharger et comparer).
+- [ ] Ne **jamais** supprimer une release qui a distribué un binaire sans
+      republier sa source ailleurs.
+
 ## Publication sur nonp.fr (après le tag)
 
 Le dépôt et le site sont deux endroits distincts : un tag posé ne publie rien. À

@@ -11,23 +11,30 @@ pour construire le binaire redistribué, au titre de l'obligation **LGPL-2.1 §4
 | Taille | ~11,7 Mo |
 | SHA-256 | `464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c` |
 | URL amont | https://ffmpeg.org/releases/ffmpeg-8.1.2.tar.xz |
-| **Source hébergée** | **https://nonp.fr/transcription** — section « Licences » |
+| **Source hébergée** | **Deux canaux** : assets des [GitHub Releases](https://github.com/Devoir76/nonp-transcription/releases) **et** `nonp.fr/transcription` |
 
-L'archive est publiée **avec le paquet de l'application**, sur la page stable
-`nonp.fr/transcription`. Le dépôt ne porte donc pas les 11,7 Mo de l'archive :
-ce dossier ne garde qu'un pointeur, et la recette de reconstruction vit dans
+L'archive est publiée **avec le paquet de l'application**, sur les deux canaux :
+en asset de chaque GitHub Release qui distribue le binaire, et sur la page
+`nonp.fr/transcription` (dont le `SHA256SUMS.txt` conserve la ligne de
+l'archive — voir la procédure dans
+[`../../docs/release-checklist.md`](../../docs/release-checklist.md)). Le dépôt
+ne porte donc pas les 11,7 Mo de l'archive : ce dossier ne garde qu'un
+pointeur, et la recette de reconstruction vit dans
 [`../../docs/BUILDING_FFMPEG.md`](../../docs/BUILDING_FFMPEG.md).
 
-Contrepartie assumée : **le lien doit rester vivant aussi longtemps que le
-binaire est distribué** — c'est ce qu'exige la LGPL. Toute refonte de
-`nonp.fr` doit préserver cette URL, ou mettre à jour les deux emplacements
-ci-dessous.
+Contrepartie assumée : **au moins un des deux canaux doit rester vivant aussi
+longtemps que le binaire est distribué** — c'est ce qu'exige la LGPL. Ne jamais
+supprimer une release GitHub qui distribue un binaire, ni refondre `nonp.fr`,
+sans préserver l'autre canal.
 
 ## Reste à faire à l'étape paquet
 
-- [ ] Déposer l'archive à l'adresse ci-dessus, en même temps que le ZIP de
-      l'application — **la page `nonp.fr/transcription` n'existe pas encore**.
-- [ ] Vérifier que l'URL sert bien le fichier et que son empreinte correspond.
+- [ ] Attacher `ffmpeg-8.1.2.tar.xz` (et son SHA-256) en asset de la release
+      GitHub, en même temps que le ZIP de l'application.
+- [ ] Déposer la même archive sur `nonp.fr/transcription` (procédure de
+      publication : `docs/release-checklist.md`).
+- [ ] Vérifier, sur chaque canal, que le fichier servi correspond à l'empreinte
+      ci-dessus.
 
 Tant que ce dépôt n'est pas fait, la conformité repose sur
 [`../../docs/BUILDING_FFMPEG.md`](../../docs/BUILDING_FFMPEG.md) — version

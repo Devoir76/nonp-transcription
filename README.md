@@ -31,7 +31,10 @@ embarqués dans l'application.
   ou **1,6 Go** avec le préréglage « Rapide ».
 
 ## Installation
-1. Téléchargez la dernière version depuis **[nonp.fr](https://nonp.fr/)** (fichier `.zip`).
+1. Téléchargez la dernière version depuis la page
+   **[Releases](https://github.com/Devoir76/nonp-transcription/releases/latest)** du dépôt
+   ou depuis **[nonp.fr](https://nonp.fr/)** (fichier `.zip`) — les deux servent la même
+   archive, empreinte SHA-256 publiée à côté.
 2. Décompressez-le et glissez **NONP Transcription** dans votre dossier **Applications**.
 3. **Premier lancement.** L'application étant distribuée librement et gratuitement (sans certificat Apple
    payant), macOS affiche un avertissement de sécurité au premier lancement. C'est normal. Pour l'autoriser :
