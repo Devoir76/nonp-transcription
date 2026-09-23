@@ -1,7 +1,7 @@
 #!/bin/bash
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
-# file, You can obtain one at https:#mozilla.org/MPL/2.0/.
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
 # build_app.sh — compile l'app avec SwiftPM et l'assemble en bundle .app.
 #
 # Pourquoi ce script ? Sans Xcode complet, SwiftPM produit seulement un binaire
@@ -15,6 +15,14 @@
 #   ./Scripts/build_app.sh --run      → idem puis lance l'application
 #   ./Scripts/build_app.sh --debug    → compilation debug (plus rapide)
 #   ./Scripts/build_app.sh --release  → build de PRODUCTION (identifiant normal)
+#   ./Scripts/build_app.sh --verifier <bundle.app>
+#                                     → passe les GARDES sur un bundle existant,
+#                                       sans rien compiler ni modifier.
+#
+# Pourquoi --verifier ? Une garde dont on n'a jamais vu l'échec n'est pas une
+# garde. Cette option permet de la braquer sur un bundle connu pour être fautif
+# (par exemple la 1.2.3 publiée) et de vérifier qu'elle s'arrête bien. Elle ne
+# fabrique rien : c'est une lecture.
 #
 # Pourquoi deux identifiants ?
 # Deux bundles portant le MÊME CFBundleIdentifier sont indiscernables pour
@@ -41,14 +49,24 @@ APP_BUNDLE="$DIST_DIR/$APP_NAME.app"
 CONFIG="release"
 DO_RUN="no"
 FLAVOR="test"                          # test (défaut) | production
+VERIFY_ONLY=""                         # chemin d'un .app à contrôler, sans fabriquer
+attend_chemin="no"
 for arg in "$@"; do
+    if [[ "$attend_chemin" == "yes" ]]; then
+        VERIFY_ONLY="$arg"; attend_chemin="no"; continue
+    fi
     case "$arg" in
-        --run)     DO_RUN="yes" ;;
-        --debug)   CONFIG="debug" ;;
-        --release) FLAVOR="production" ;;
+        --run)      DO_RUN="yes" ;;
+        --debug)    CONFIG="debug" ;;
+        --release)  FLAVOR="production" ;;
+        --verifier) attend_chemin="yes" ;;
         *) echo "Option inconnue : $arg" >&2; exit 1 ;;
     esac
 done
+if [[ "$attend_chemin" == "yes" ]]; then
+    echo "✗ --verifier attend le chemin d'un bundle .app" >&2
+    exit 1
+fi
 
 # Identifiant appliqué au bundle selon le type de build.
 if [[ "$FLAVOR" == "test" ]]; then
@@ -57,15 +75,164 @@ else
     BUNDLE_ID="com.nonp.transcription"
 fi
 
-# --- 1) Compilation SwiftPM ----------------------------------------------
-echo "▸ Compilation ($CONFIG)…"
-swift build -c "$CONFIG"
+# --- 0) Choix du SDK macOS ------------------------------------------------
+# Contournement daté du 17/09/2026, repris d'Habillage : les Command Line Tools
+# 27.0 livrent un SDK où @State est une macro, mais pas le plugin qui
+# l'implémente. Le fichier choisit un SDK qui compile, impose le système de
+# build qui MARQUE correctement le binaire, et fournit les deux gardes de
+# marquage. Tout le détail — et la condition de retrait — y est écrit.
+source "$SCRIPT_DIR/sdk_macos.sh"
 
-BUILD_BIN="$(swift build -c "$CONFIG" --show-bin-path)/$EXECUTABLE_NAME"
+# --- 0b) Gardes de fabrication -------------------------------------------
+# Elles portent sur le bundle ASSEMBLÉ — celui qui part dans le ZIP — et non sur
+# les sources ni sur le binaire nu. C'est précisément l'angle mort qui a laissé
+# passer les deux défauts de la 1.2.3 : le harnais de test ne voit que le binaire
+# compilé par SwiftPM, jamais le .app.
+#
+# Aucune garde n'affiche la VALEUR d'un chemin personnel : seulement des comptes.
+
+# Nombre d'occurrences du dossier personnel dans un fichier. On compte les
+# OCCURRENCES (grep -o) et non les lignes : un binaire n'a pas de lignes, et
+# quarante chemins collés dans la même « ligne » compteraient pour un seul.
+compter_dossier_personnel() {
+    local n
+    n=$(LC_ALL=C grep -oaF "$HOME" "$1" 2>/dev/null | wc -l | tr -d ' ') || true
+    echo "${n:-0}"
+}
+
+# Entrées de débogage restantes. N_OSO porte le chemin absolu de chaque .o,
+# N_SO celui du dossier des sources : les deux nomment la machine de fabrication.
+# Mesuré sur la 1.2.3 publiée : 29 OSO + 88 SO, et 58 occurrences du dossier
+# personnel, TOUTES dans la table des chaînes de symboles — aucune dans le code.
+compter_stabs() {
+    nm -pa "$1" 2>/dev/null | grep -cE ' (OSO|SO) ' || true
+}
+
+# Contrôle d'un Mach-O : plus aucune entrée de débogage, plus aucun chemin perso.
+verifier_macho() {
+    local f="$1" stabs occ
+    stabs=$(compter_stabs "$f")
+    occ=$(compter_dossier_personnel "$f")
+    echo "    $(basename "$f") : entrées OSO/SO $stabs · occurrences du dossier personnel $occ"
+    [[ "$stabs" -eq 0 && "$occ" -eq 0 ]]
+}
+
+# TOUS les Mach-O du bundle, quels qu'ils soient : le jour où un binaire s'ajoute
+# à Resources/bin, il est contrôlé sans qu'on ait à penser à l'inscrire ici.
+verifier_chemins_bundle() {
+    local bundle="$1" f n=0 defauts=0
+    echo "▸ Garde des chemins (tous les Mach-O du bundle)…"
+    while IFS= read -r f; do
+        file -b "$f" | grep -q 'Mach-O' || continue
+        n=$((n + 1))
+        verifier_macho "$f" || defauts=$((defauts + 1))
+    done < <(find "$bundle" -type f)
+
+    if [[ "$n" -eq 0 ]]; then
+        echo "✗ Aucun Mach-O trouvé dans le bundle — contrôle sans objet, build interrompue." >&2
+        return 1
+    fi
+    if [[ "$defauts" -ne 0 ]]; then
+        echo "✗ $defauts Mach-O sur $n portent encore une table de débogage ou un" >&2
+        echo "  chemin de la machine de fabrication — build interrompue." >&2
+        echo "  (dsymutil puis strip -S doivent précéder la signature.)" >&2
+        return 1
+    fi
+    echo "  ✓ $n Mach-O contrôlés : aucune entrée de débogage, aucun chemin personnel"
+}
+
+# Garde de langue. Mesuré le 22/09 sur NONP Habillage : sans langue déclarée,
+# macOS tient l'application pour anglaise et affiche en anglais les menus qu'il
+# fournit — Édition, Fenêtre, Aide, « Réglages… », « Quitter ». L'application
+# n'en déclare aucun elle-même : ils viennent tous de macOS. Deux clés suffisent,
+# sans dossier fr.lproj — vérifié à l'écran.
+verifier_langue_francaise() {
+    local plist="$1" region langues
+    region=$(plutil -extract CFBundleDevelopmentRegion raw "$plist" 2>/dev/null || true)
+    langues=$(plutil -extract CFBundleLocalizations json -o - "$plist" 2>/dev/null || true)
+    if [[ "$region" != "fr" ]] || ! grep -q '"fr"' <<< "$langues"; then
+        echo "✗ L'Info.plist du bundle ne déclare pas le français" >&2
+        echo "  (CFBundleDevelopmentRegion = « ${region:-absent} »," \
+             "CFBundleLocalizations = ${langues:-absent}) — build interrompue." >&2
+        echo "  Sans cette déclaration, les menus fournis par macOS s'affichent" \
+             "en anglais." >&2
+        return 1
+    fi
+    echo "  ✓ langue déclarée : français (menus de macOS en français)"
+}
+
+# Marquage du bundle assemblé. `verifier_marquage_sdk` (sdk_macos.sh) contrôle
+# le binaire nu sorti de SwiftPM ; celle-ci contrôle celui qui part vraiment,
+# après strip — un chaînon qui manquerait sinon.
+#
+# Seul l'exécutable de l'application est contrôlé. Les moteurs de Resources/bin
+# sont versionnés, redistribués à l'identique et portent le marquage de leur
+# propre compilation : le leur n'a pas à coïncider avec le SDK du jour.
+verifier_marquage_bundle() {
+    local bundle="$1" exe
+    exe=$(plutil -extract CFBundleExecutable raw "$bundle/Contents/Info.plist" 2>/dev/null || true)
+    if [[ -z "$exe" || ! -f "$bundle/Contents/MacOS/$exe" ]]; then
+        echo "✗ Exécutable introuvable dans le bundle — contrôle impossible." >&2
+        return 1
+    fi
+    verifier_marquage_sdk "$bundle/Contents/MacOS/$exe"
+}
+
+# Signature : contrôlée APRÈS le strip, qui l'invalide et le dit lui-même.
+verifier_signature() {
+    codesign --verify --deep --strict "$1" 2>/dev/null || {
+        echo "✗ Signature invalide — build interrompue." >&2
+        echo "  (strip invalide la signature : codesign doit venir APRÈS.)" >&2
+        return 1
+    }
+    echo "  ✓ signature vérifiée (--deep --strict)"
+}
+
+# Mode contrôle seul : on braque les gardes sur un bundle existant et on sort.
+# Rien n'est compilé, rien n'est modifié — c'est une lecture.
+if [[ -n "$VERIFY_ONLY" ]]; then
+    if [[ ! -d "$VERIFY_ONLY" ]]; then
+        echo "✗ Bundle introuvable : $VERIFY_ONLY" >&2
+        exit 1
+    fi
+    echo "▸ Contrôle seul, aucune fabrication."
+    # Le SDK est choisi même ici : la garde de marquage a besoin de savoir à
+    # quoi comparer. La sonde ne fait qu'une vérification de types, elle ne
+    # produit aucun binaire.
+    choisir_sdk_macos || exit 1
+    echec=0
+    verifier_chemins_bundle "$VERIFY_ONLY"               || echec=1
+    echo "▸ Garde de marquage SDK…"
+    verifier_marquage_bundle "$VERIFY_ONLY"              || echec=1
+    echo "▸ Garde de langue…"
+    verifier_langue_francaise "$VERIFY_ONLY/Contents/Info.plist" || echec=1
+    echo "▸ Garde de signature…"
+    verifier_signature "$VERIFY_ONLY"                    || echec=1
+    if [[ "$echec" -ne 0 ]]; then
+        echo "✗ Ce bundle ne passerait PAS la fabrication." >&2
+        exit 1
+    fi
+    echo "✓ Ce bundle passe toutes les gardes."
+    exit 0
+fi
+
+# --- 1) Compilation SwiftPM ----------------------------------------------
+choisir_sdk_macos || exit 1
+
+echo "▸ Compilation ($CONFIG)…"
+swift build -c "$CONFIG" "${OPTIONS_SWIFT_BUILD[@]}"
+
+# Les MÊMES options pour --show-bin-path : les deux systèmes de build ne rangent
+# pas leurs produits au même endroit.
+BUILD_BIN="$(swift build -c "$CONFIG" "${OPTIONS_SWIFT_BUILD[@]}" --show-bin-path)/$EXECUTABLE_NAME"
 if [[ ! -f "$BUILD_BIN" ]]; then
     echo "✗ Binaire introuvable : $BUILD_BIN" >&2
     exit 1
 fi
+
+# Marquage du binaire nu, au plus près de sa production : si le système de build
+# a inscrit un autre SDK que celui qu'on a choisi, rien de ce qui suit ne vaut.
+verifier_marquage_sdk "$BUILD_BIN" || exit 1
 
 # --- 2) Assemblage du bundle .app ----------------------------------------
 echo "▸ Assemblage du bundle…"
@@ -78,6 +245,10 @@ cp "$PROJECT_ROOT/Resources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 
 # Applique l'identifiant correspondant au type de build (avant signature).
 plutil -replace CFBundleIdentifier -string "$BUNDLE_ID" "$APP_BUNDLE/Contents/Info.plist"
+
+# Garde de langue, sur l'Info.plist du bundle assemblé (pas sur la source).
+echo "▸ Garde de langue…"
+verifier_langue_francaise "$APP_BUNDLE/Contents/Info.plist" || exit 1
 
 # Icône de l'application (si présente).
 if [[ -f "$PROJECT_ROOT/Resources/AppIcon.icns" ]]; then
@@ -161,13 +332,58 @@ if [[ ! -d "$LICENSES_DST" || -z "$(ls -A "$LICENSES_DST")" ]]; then
 fi
 echo "  ✓ ${#LICENSE_FILES[@]} textes de licence embarqués"
 
+# --- 2d) Table de débogage : trois gestes, dans cet ordre ------------------
+# Mesuré le 21/09 sur la 1.2.3 PUBLIÉE : son binaire portait 29 entrées N_OSO,
+# 88 entrées N_SO et 58 occurrences du dossier personnel de la machine de
+# fabrication — toutes dans la table des chaînes de symboles, aucune dans le
+# code. Rien ne fuyait par le dépôt : la fuite naissait au build.
+#
+#   1. dsymutil — extrait la table AVANT de la détruire. Après le strip elle est
+#      perdue, et plus aucun rapport de plantage ne sera symbolisable.
+#   2. strip -S — retire la table du binaire. Mesuré : 58 → 0 occurrences,
+#      117 → 0 entrées OSO/SO. Le strip complet ne retire rien de plus côté fuite.
+#   3. codesign — EN DERNIER : strip invalide la signature et le dit lui-même en
+#      avertissement. Signer avant le strip, c'est livrer un bundle que macOS
+#      déclare « endommagé ».
+#
+# Le dSYM ne va NI dans dist/ NI dans le ZIP : il porte exactement les mêmes
+# chemins. Il vit hors dépôt, à côté des traces de session, pour permettre de
+# symboliser un rapport de plantage après coup.
+#
+# Seul le binaire de l'application est strippé. Les moteurs embarqués sont
+# versionnés dans Vendor/bin et redistribués À L'IDENTIQUE — leurs empreintes
+# SHA-256 sont publiées dans THIRD_PARTY_NOTICES.md. Mesuré : ils ne portent
+# déjà aucune entrée de débogage ni aucun chemin personnel. La garde les
+# contrôle quand même, elle ne les modifie pas.
+DSYM_DIR="${NONP_DSYM_DIR:-$HOME/Developer/NONP-traces/dsym}"
+BIN_APP="$APP_BUNDLE/Contents/MacOS/$EXECUTABLE_NAME"
+
+echo "▸ Extraction de la table de débogage…"
+mkdir -p "$DSYM_DIR"
+if dsymutil "$BIN_APP" -o "$DSYM_DIR/$EXECUTABLE_NAME-$FLAVOR.dSYM" 2>/dev/null; then
+    echo "  ✓ dSYM conservé hors dépôt"
+else
+    echo "  ⚠️  dsymutil n'a rien produit — poursuite, le strip reste nécessaire"
+fi
+
+echo "▸ Retrait de la table de débogage…"
+strip -S "$BIN_APP"
+
+# --- 2e) Gardes sur le bundle assemblé ------------------------------------
+# Placées AVANT la signature : un bundle fautif ne doit même pas être signé.
+verifier_chemins_bundle "$APP_BUNDLE" || exit 1
+echo "▸ Garde de marquage SDK…"
+verifier_marquage_bundle "$APP_BUNDLE" || exit 1
+
 # --- 3) Signature ad-hoc --------------------------------------------------
 # Signature locale « ad-hoc » : suffisante pour un usage personnel quotidien,
 # évite les blocages Gatekeeper au lancement local. (Pas de compte développeur requis.)
+# APRÈS le strip, jamais avant : voir l'ordre des trois gestes ci-dessus.
 echo "▸ Signature ad-hoc…"
 codesign --force --deep --sign - "$APP_BUNDLE" 2>/dev/null || {
     echo "  (signature ad-hoc ignorée — non bloquant en local)"
 }
+verifier_signature "$APP_BUNDLE" || exit 1
 
 VERSION=$(plutil -extract CFBundleShortVersionString raw "$APP_BUNDLE/Contents/Info.plist")
 echo "✓ Application prête : $APP_BUNDLE"

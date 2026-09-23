@@ -10,6 +10,20 @@
     <key>CFBundleDisplayName</key>
     <string>NONP Transcription</string>
 
+    <!-- Langue de l'application. Mesuré le 22/09 sur NONP Habillage : sans ces
+         deux clés, macOS tient l'application pour anglaise et affiche EN ANGLAIS
+         les menus qu'il fournit lui-même (Édition, Fenêtre, Aide, « Réglages… »,
+         « Quitter »). L'application n'en déclare aucun : tout vient de macOS.
+         Ces deux clés suffisent — vérifié à l'écran, aucun dossier fr.lproj
+         n'est nécessaire. Garde de fabrication dans Scripts/build_app.sh. -->
+    <key>CFBundleDevelopmentRegion</key>
+    <string>fr</string>
+
+    <key>CFBundleLocalizations</key>
+    <array>
+        <string>fr</string>
+    </array>
+
     <!-- Nom du binaire dans Contents/MacOS/ -->
     <key>CFBundleExecutable</key>
     <string>NONPTranscription</string>
@@ -29,10 +43,10 @@
 
     <!-- Version affichée dans la fenêtre « À propos ». -->
     <key>CFBundleShortVersionString</key>
-    <string>1.2.3</string>
+    <string>1.2.4</string>
 
     <key>CFBundleVersion</key>
-    <string>8</string>
+    <string>9</string>
 
     <!-- macOS 14 minimum, cohérent avec Package.swift -->
     <key>LSMinimumSystemVersion</key>
