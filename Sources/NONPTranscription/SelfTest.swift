@@ -14,6 +14,7 @@
 //   NONPTranscription --prefs-cases                 (persistance, même process)
 //   NONPTranscription --prefs-write                 (persistance, process 1/2)
 //   NONPTranscription --prefs-read                  (persistance, process 2/2)
+//   NONPTranscription --url-cases                   (recevabilité des URL déposées)
 
 import Foundation
 import AppKit   // pour NSWorkspace (ouverture du dossier), via --reveal
@@ -70,6 +71,113 @@ enum SelfTest {
         if args.contains("--naming-cases") {
             runBlocking { await namingCases() }
         }
+        // Recevabilité des URL déposées (V1.2.4). Sans réseau, sans média.
+        if args.contains("--url-cases") {
+            runBlocking { await urlCases() }
+        }
+    }
+
+    // MARK: - Recevabilité des URL déposées (V1.2.4)
+
+    /// Éprouve `MediaFile.rejection(for:)` et la garde du chargeur de métadonnées.
+    ///
+    /// **Aucune requête ne part d'ici.** Les adresses de test emploient le domaine
+    /// réservé `.invalid` (RFC 2606), qui ne se résout jamais : même si une garde
+    /// venait à sauter, aucun hôte réel ne serait joint. C'est la condition pour
+    /// qu'un harnais puisse éprouver un refus réseau sans en provoquer un.
+    ///
+    /// **Ces contrôles ÉCHOUENT sur le code antérieur à la 1.2.4** — c'est leur
+    /// témoin. Avant la correction, une adresse web dont le chemin se terminait
+    /// par une extension connue était acceptée comme un fichier, et le lecteur de
+    /// métadonnées ouvrait une connexion vers l'hôte distant.
+    private static func urlCases() async -> Int32 {
+        var failures = 0
+        var total = 0
+        func check(_ label: String, _ ok: Bool, _ detail: String = "") {
+            total += 1
+            if !ok { failures += 1 }
+            print("[selftest] \(ok ? "OK  " : "ÉCHEC") — \(label)\(detail.isEmpty ? "" : " · \(detail)")")
+        }
+
+        func url(_ s: String) -> URL { URL(string: s)! }
+
+        // --- U1 à U4 : une adresse distante est refusée, quelle qu'en soit
+        //               l'extension. C'est le cas mesuré le 24/09.
+        check("U1. https + extension connue → refus « non locale »",
+              MediaFile.rejection(for: url("https://exemple.invalid/essai.mp4")) == .notLocal,
+              String(describing: MediaFile.rejection(for: url("https://exemple.invalid/essai.mp4"))))
+        check("U2. http + extension connue → refus « non locale »",
+              MediaFile.rejection(for: url("http://exemple.invalid/essai.wav")) == .notLocal)
+        check("U3. https SANS extension → refus « non locale », pas « format »",
+              MediaFile.rejection(for: url("https://exemple.invalid/page")) == .notLocal,
+              "l'ordre compte : la localité avant le format")
+        check("U4. ftp + extension connue → refus « non locale »",
+              MediaFile.rejection(for: url("ftp://exemple.invalid/essai.mov")) == .notLocal)
+
+        // --- U5 à U7 : le comportement local est INCHANGÉ ---------------------
+        check("U5. fichier local pris en charge → recevable",
+              MediaFile.rejection(for: URL(fileURLWithPath: "/tmp/entretien.mp4")) == nil)
+        check("U6. fichier local non pris en charge → refus « format », extension citée",
+              MediaFile.rejection(for: URL(fileURLWithPath: "/tmp/essai.xyz"))
+                == .unsupportedFormat("xyz"))
+        check("U7. chemin local sans extension → refus « format », « inconnu »",
+              MediaFile.rejection(for: URL(fileURLWithPath: "/tmp/un-dossier"))
+                == .unsupportedFormat("inconnu"))
+
+        // --- U8 : casse de l'extension, comportement d'origine préservé -------
+        check("U8. extension en capitales → recevable",
+              MediaFile.rejection(for: URL(fileURLWithPath: "/tmp/ENTRETIEN.MP4")) == nil)
+
+        // --- U9 à U11 : la garde du chargeur de métadonnées --------------------
+        //
+        // TÉMOIN DE COMPORTEMENT, pas de chronomètre. Le chargeur doit LEVER
+        // l'erreur « non locale ». C'est impossible sur le code antérieur à la
+        // 1.2.4, où il ne levait rien du tout : ces contrôles échouent donc
+        // AVANT et passent APRÈS, sur n'importe quelle machine.
+        //
+        // Une version antérieure de ce harnais jugeait sur la durée d'exécution
+        // — « retour en moins de N ms ». Il a fallu resserrer le seuil de 200 à
+        // 20 ms pour qu'il morde : un témoin qu'on ajuste jusqu'à ce qu'il
+        // réponde ne prouve rien, et il dépend de la machine. Écarté.
+        let t0 = Date()
+        var leve = false
+        var erreurRendue: MediaFileLoaderError?
+        do {
+            _ = try await MediaFileLoader.load(from: url("https://exemple.invalid/essai.mp4"))
+        } catch let e as MediaFileLoaderError {
+            leve = true
+            erreurRendue = e
+        } catch {
+            leve = true
+        }
+        let ms = Date().timeIntervalSince(t0) * 1000
+
+        check("U9. chargeur sur URL distante → REFUSE (lève une erreur)", leve)
+        check("U10. l'erreur levée est bien « non locale »",
+              erreurRendue == .notLocal, String(describing: erreurRendue))
+        check("U11. le refus porte un message affichable, non vide",
+              !(erreurRendue?.errorDescription ?? "").isEmpty)
+
+        // Indication SECONDAIRE, jamais un témoin : sans la garde, AVFoundation
+        // tentait une résolution de nom et mettait ~100 à 150 ms à échouer. Le
+        // chiffre est imprimé pour l'œil, il ne décide de rien.
+        print(String(format: "[selftest] ····  indication — refus rendu en %.1f ms (ne décide de rien)", ms))
+
+        // --- U12 : le chemin local, lui, fonctionne toujours -------------------
+        // Sans ce contre-contrôle, une garde trop large passerait inaperçue :
+        // un chargeur qui refuserait TOUT ferait passer U9 à U11.
+        let temp = URL(fileURLWithPath: NSTemporaryDirectory(), isDirectory: true)
+            .appendingPathComponent("nonp-url-cases-\(getpid()).wav")
+        FileManager.default.createFile(atPath: temp.path, contents: Data(repeating: 0, count: 2048))
+        defer { try? FileManager.default.removeItem(at: temp) }
+        var ficheLocale: MediaFile?
+        do { ficheLocale = try await MediaFileLoader.load(from: temp) } catch { ficheLocale = nil }
+        check("U12. chargeur sur fichier LOCAL → ne refuse pas, et lit la taille",
+              ficheLocale?.sizeBytes == 2048,
+              "taille=\(String(describing: ficheLocale?.sizeBytes))")
+
+        print("[selftest] bilan recevabilité des URL : \(total - failures)/\(total) OK")
+        return failures == 0 ? 0 : 9
     }
 
     // MARK: - Nommage des exports par langue (V1.2.1)

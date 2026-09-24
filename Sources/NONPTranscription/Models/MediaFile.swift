@@ -26,9 +26,46 @@ struct MediaFile: Identifiable, Sendable {
         "mp3", "wav", "m4a"           // audio
     ]
 
-    /// Vrai si l'URL pointe vers un format pris en charge.
+    // MARK: - Recevabilité d'une URL déposée
+
+    /// Pourquoi une URL est refusée. `nil` = recevable.
+    ///
+    /// Fonction PURE, sans accès disque ni réseau : c'est le point UNIQUE où la
+    /// recevabilité se décide, afin qu'elle soit éprouvable sans interface et
+    /// sans média (cf. SelfTest `--url-cases`). Même intention qu'ExportNaming.
+    enum Rejection: Equatable, Sendable {
+        /// L'URL ne désigne pas un fichier de cette machine (adresse web, etc.).
+        case notLocal
+        /// Fichier local, mais extension non prise en charge. Porte l'extension
+        /// telle qu'elle sera montrée à l'utilisateur (« inconnu » si absente).
+        case unsupportedFormat(String)
+    }
+
+    /// Décide de la recevabilité d'une URL déposée.
+    ///
+    /// **L'ordre compte.** La localité est contrôlée AVANT le format : une
+    /// adresse web dont le chemin se termine par une extension connue
+    /// franchirait sinon le filtre. Mesuré le 24/09 — une telle adresse était
+    /// acceptée comme un fichier, et le lecteur de métadonnées d'AVFoundation
+    /// ouvrait alors une connexion TLS de deux minutes vers l'hôte distant.
+    /// C'est contraire à l'invariant « tout en local ».
+    static func rejection(for url: URL) -> Rejection? {
+        guard url.isFileURL else { return .notLocal }
+        let ext = url.pathExtension.lowercased()
+        guard acceptedExtensions.contains(ext) else {
+            return .unsupportedFormat(ext.isEmpty ? "inconnu" : ext)
+        }
+        return nil
+    }
+
+    /// Vrai si l'URL est recevable — fichier LOCAL et format pris en charge.
+    ///
+    /// Défini PAR `rejection(for:)`, et non à côté : deux prédicats voisins de
+    /// sens opposé finissent toujours par diverger. C'est cette divergence qui a
+    /// laissé passer une adresse web en 1.2.3 — l'ancien `isAccepted` ne jugeait
+    /// que l'extension, et rien ne rappelait qu'il ne jugeait que cela.
     static func isAccepted(_ url: URL) -> Bool {
-        acceptedExtensions.contains(url.pathExtension.lowercased())
+        rejection(for: url) == nil
     }
 
     // MARK: - Présentation

@@ -13,10 +13,43 @@
 import Foundation
 import AVFoundation
 
+/// Refus opposé par le chargeur. Une seule cause aujourd'hui : l'URL n'est pas
+/// locale. Le message est affichable tel quel.
+enum MediaFileLoaderError: LocalizedError, Equatable {
+    case notLocal
+
+    var errorDescription: String? {
+        switch self {
+        case .notLocal:
+            return "Cette adresse ne désigne pas un fichier de cet ordinateur."
+        }
+    }
+}
+
 enum MediaFileLoader {
-    /// Construit un `MediaFile` en lisant taille et durée. Ne lève jamais
-    /// d'erreur : en cas de souci, la durée vaut simplement `nil`.
-    static func load(from url: URL) async -> MediaFile {
+    /// Construit un `MediaFile` en lisant taille et durée.
+    ///
+    /// Ne lève **qu'une seule** erreur : une URL non locale. Tout le reste reste
+    /// tolérant comme avant — une durée illisible vaut simplement `nil`.
+    static func load(from url: URL) async throws -> MediaFile {
+        // DÉFENSE EN PROFONDEUR — jamais d'actif AVFoundation sur une URL distante.
+        //
+        // AVURLAsset va CHERCHER ce qu'on lui donne : sur une adresse web, il
+        // ouvre une connexion réseau pour lire les métadonnées. Mesuré le 24/09
+        // sur la 1.2.3 — une connexion TLS de deux minutes vers un hôte distant,
+        // contraire à l'invariant « tout en local ».
+        //
+        // Ce chargeur REFUSE, il ne rend pas une fiche vide. Rendre un MediaFile
+        // de taille nulle et de durée inconnue reproduirait exactement l'état
+        // trompeur observé à l'écran le 24/09 — « Zéro ko », durée « — », et un
+        // bouton « Transcrire » actif sur un fichier qui n'existe pas. Une
+        // barrière qui laisse passer un objet vide n'est qu'une demi-barrière.
+        //
+        // AppState.selectFile refuse déjà ces URL en amont. Cette garde-ci existe
+        // pour qu'un SECOND appelant — traitement par lots, reprise de session —
+        // ne rouvre pas la brèche sans s'en apercevoir.
+        guard url.isFileURL else { throw MediaFileLoaderError.notLocal }
+
         // Taille du fichier via les attributs du système de fichiers.
         let size: Int64 = {
             let attrs = try? FileManager.default.attributesOfItem(atPath: url.path)

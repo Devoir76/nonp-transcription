@@ -46,7 +46,7 @@
     <string>1.2.4</string>
 
     <key>CFBundleVersion</key>
-    <string>9</string>
+    <string>10</string>
 
     <!-- macOS 14 minimum, cohérent avec Package.swift -->
     <key>LSMinimumSystemVersion</key>

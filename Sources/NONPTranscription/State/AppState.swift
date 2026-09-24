@@ -61,6 +61,23 @@ final class AppState: ObservableObject {
         mediaFile != nil && !isLoadingFile
     }
 
+    // MARK: - Messages de refus
+
+    /// Texte affiché quand l'utilisateur dépose une adresse web au lieu d'un
+    /// fichier. Distinct du message de format : la cause n'est pas la même, et
+    /// conseiller « convertissez votre fichier » n'aurait aucun sens ici.
+    ///
+    /// Formulation arrêtée le 24/09. Elle dit la raison, et pas seulement le
+    /// geste : un refus devient un rappel de ce qui fait la valeur du produit.
+    ///
+    /// « **vos fichiers** ne partent jamais », et non « rien ne part » :
+    /// l'application utilise bien Internet, une fois, pour télécharger le
+    /// modèle. Une promesse trop large serait fausse.
+    static let notLocalMessage =
+        "NONP Transcription ne travaille que sur des fichiers présents sur votre Mac "
+        + "— vos fichiers ne partent jamais sur Internet. "
+        + "Enregistrez d'abord la vidéo ou l'audio, puis déposez le fichier ici."
+
     // MARK: - Actions
 
     /// Point d'entrée unique pour un fichier (glisser-déposer OU bouton Parcourir).
@@ -68,17 +85,33 @@ final class AppState: ObservableObject {
     func selectFile(at url: URL) {
         errorMessage = nil
 
-        guard MediaFile.isAccepted(url) else {
-            let ext = url.pathExtension.isEmpty ? "inconnu" : url.pathExtension.lowercased()
-            errorMessage = "Format « .\(ext) » non pris en charge. "
-                + "Formats acceptés : MP4, MOV, AVI, MKV, MP3, WAV, M4A."
+        // Recevabilité décidée en un seul endroit (fonction pure, éprouvée par
+        // SelfTest --url-cases). La localité passe AVANT le format : voir
+        // MediaFile.rejection(for:).
+        if let refus = MediaFile.rejection(for: url) {
+            switch refus {
+            case .notLocal:
+                errorMessage = Self.notLocalMessage
+            case .unsupportedFormat(let ext):
+                errorMessage = "Format « .\(ext) » non pris en charge. "
+                    + "Formats acceptés : MP4, MOV, AVI, MKV, MP3, WAV, M4A."
+            }
             return
         }
 
         isLoadingFile = true
         Task {
-            let file = await MediaFileLoader.load(from: url)
-            self.mediaFile = file
+            do {
+                let file = try await MediaFileLoader.load(from: url)
+                self.mediaFile = file
+            } catch {
+                // Le refus du chargeur (URL non locale) ne devrait jamais
+                // arriver ici : la garde ci-dessus l'a déjà écarté. S'il
+                // survient malgré tout, on l'AFFICHE plutôt que de le taire —
+                // une barrière franchie en silence est pire qu'une barrière
+                // absente, parce qu'on ne la cherche pas.
+                self.errorMessage = Self.notLocalMessage
+            }
             self.isLoadingFile = false
         }
     }
