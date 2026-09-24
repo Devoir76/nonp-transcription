@@ -12,7 +12,8 @@
 #   1. le VRAI SubtitleExporter sur les cas de résolution du dossier de sortie ;
 #   2. la persistance des réglages dans un même process (cohérence écriture/relecture) ;
 #   3. la persistance entre DEUX process distincts — seul test qui exerce le vrai
-#      mode d'échec de BUG-006, la persistance adossée au disque entre deux lancements.
+#      mode d'échec de BUG-006, la persistance adossée au disque entre deux lancements ;
+#   4. la recevabilité des URL déposées (V1.2.4) — aucune requête réseau n'en part.
 #
 # Les tests de persistance écrivent dans une suite UserDefaults ISOLÉE
 # (com.nonp.transcription.selftest*), JAMAIS dans les réglages réels de
@@ -41,10 +42,20 @@ if [ "$(id -u)" -eq 0 ]; then
     exit 6
 fi
 
-echo "== Compilation (debug) =="
-swift build 2>&1 | tail -5
+# Même contournement de chaîne d'outils que Scripts/build_app.sh : les Command
+# Line Tools 27.0 livrent un SDK où @State est une macro, sans le plugin qui
+# l'implémente. Sans ce choix de SDK, ce harnais ne compile plus du tout.
+# Contournement daté du 17/09/2026 — voir Scripts/sdk_macos.sh.
+source "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/sdk_macos.sh"
+choisir_sdk_macos || exit 1
 
-BIN="$(swift build --show-bin-path)/NONPTranscription"
+echo "== Compilation (debug) =="
+swift build "${OPTIONS_SWIFT_BUILD[@]}" 2>&1 | tail -5
+
+# Les MÊMES options pour --show-bin-path : les deux systèmes de build ne rangent
+# pas leurs produits au même endroit.
+BIN="$(swift build "${OPTIONS_SWIFT_BUILD[@]}" --show-bin-path)/NONPTranscription"
+verifier_marquage_sdk "$BIN" || exit 1
 echo
 echo "== Cas de repli du dossier de sortie =="
 "$BIN" --export-cases
@@ -57,3 +68,7 @@ echo
 echo "== Persistance des réglages — cross-process (suite isolée) =="
 "$BIN" --prefs-write
 "$BIN" --prefs-read
+
+echo
+echo "== Recevabilité des URL déposées (sans réseau) =="
+"$BIN" --url-cases
