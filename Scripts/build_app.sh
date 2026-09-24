@@ -264,6 +264,26 @@ if [[ -n "$VERIFY_ONLY" ]]; then
 fi
 
 # --- 1) Compilation SwiftPM ----------------------------------------------
+# Fabrication DÉTERMINISTE — mesuré le 24/09.
+#
+# Deux fabrications du même arbre rendaient deux CDHash différents. La cause
+# n'était pas un hasard : l'éditeur de liens calcule le LC_UUID sur le contenu,
+# carte de débogage comprise, et chaque entrée N_OSO porte l'HORODATAGE de son
+# fichier objet. Deux compilations, deux horodatages, donc deux UUID — et comme
+# la signature couvre l'UUID, deux CDHash. Mesuré : chemins OSO identiques,
+# seules les dates changeaient ; 29 entrées, 29 octets de différence.
+#
+# `strip` retire ensuite ces entrées, mais trop tard : l'UUID est déjà gravé.
+#
+# ZERO_AR_DATE=1 fait écrire 0 à la place de ces horodatages. La variable n'est
+# documentée dans aucune page de manuel ; elle est lue par le `ld` d'Apple, dont
+# le binaire porte la chaîne. Mesuré avec : dates OSO à zéro, même UUID, même
+# CDHash, binaires IDENTIQUES octet pour octet sur deux fabrications.
+#
+# Fixé ICI et non dans l'environnement : un réglage qu'on oublie de poser rend
+# un bundle qu'on ne saura pas rattacher à un commit.
+export ZERO_AR_DATE=1
+
 choisir_sdk_macos || exit 1
 
 echo "▸ Compilation ($CONFIG)…"

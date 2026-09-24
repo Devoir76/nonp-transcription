@@ -505,6 +505,46 @@ Quelques textes datent, et ils ne peuvent pas être justes avant ce moment.
       - **s'il diffère**, on ne publie pas ce ZIP : on refait le ZIP depuis le
         commit tagué, et les tests avec — fiche comprise.
 
+> ⛔ **CETTE RÈGLE A ÉTÉ POSÉE AVANT D'ÊTRE MESURÉE — leçon du 24/09.**
+>
+> « Le CDHash doit être identique » exige une fabrication **reproductible bit à
+> bit**. Personne n'avait vérifié qu'elle l'était. **Elle ne l'était pas** :
+> mesuré ce jour-là, deux fabrications d'un arbre identique rendaient deux
+> CDHash différents, et la règle était donc **inatteignable** — elle aurait
+> bloqué toute publication, ou, pire, aurait été contournée sans qu'on écrive
+> pourquoi.
+>
+> **Une règle se pose sur la mesure, pas sur ce qui paraît raisonnable.** C'est
+> vrai des gardes de fabrication comme des règles de release, et c'est d'autant
+> plus vrai quand la règle a l'air évidente : celle-ci l'avait.
+>
+> *Ironie utile : `docs/BUILDING_FFMPEG.md` disait déjà la chose juste pour
+> FFmpeg — « le script ne garantit pas une reproduction bit à bit » — et
+> personne n'avait appliqué la remarque à l'application.*
+>
+> **La cause, et le remède, tous deux mesurés.** Le `LC_UUID` n'est pas tiré au
+> sort : l'éditeur de liens le calcule sur le contenu, **carte de débogage
+> comprise**, et chaque entrée `N_OSO` porte l'**horodatage** de son fichier
+> objet. Deux compilations, deux horodatages, deux UUID — et comme la signature
+> couvre l'UUID, deux CDHash. Vérifié : les **chemins** OSO étaient identiques,
+> seules les **dates** changeaient ; 29 entrées, 29 octets de différence. Le
+> `strip` retire ces entrées, mais trop tard : l'UUID est déjà gravé.
+>
+> `ZERO_AR_DATE=1` fait écrire 0 à la place de ces horodatages. La variable n'est
+> documentée dans aucune page de manuel ; elle est lue par le `ld` d'Apple, dont
+> le binaire porte la chaîne. **Elle est désormais fixée dans
+> `Scripts/build_app.sh`**, et non dans l'environnement — un réglage qu'on
+> oublie de poser rend un bundle qu'on ne saura pas rattacher à un commit.
+>
+> **Mesuré après correction** : dates OSO à zéro, même UUID, même CDHash,
+> binaires **identiques octet pour octet** sur deux fabrications successives —
+> et le dSYM porte bien l'UUID du binaire. La règle ci-dessus est donc
+> **désormais tenable**, et c'est seulement maintenant qu'elle a un sens.
+>
+> **Contrôle à faire une fois par release**, avant d'y croire : fabriquer deux
+> fois de suite depuis l'arbre propre et comparer les deux CDHash. Si la chaîne
+> d'outils change, c'est ce contrôle qui le dira.
+
 ---
 
 ## Distribution
