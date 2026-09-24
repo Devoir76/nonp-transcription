@@ -35,6 +35,27 @@ TARBALL_SHA256="464beb5e7bf0c311e68b45ae2f04e9cc2af88851abb4082231742a74d97b524c
 # GPL, qui n'existe plus. Sans ce fichier, le build ne serait plus reproductible.
 DECODER_LIST="$SCRIPT_DIR/ffmpeg-audio-decoders.txt"
 
+# --- Cible et SDK : FIXÉS ICI, jamais laissés à l'environnement -------------
+# Mesuré le 24/09 : les binaires embarqués de la 1.2.3 déclaraient « minos 26.0 »
+# — la version de la machine qui les avait compilés — alors que l'application
+# déclare 14.0 et que la page de téléchargement promet « macOS 14 ou plus
+# récent ». Personne ne l'avait décidé : aucune cible n'était fixée, et clang
+# avait pris celle du système.
+#
+# Le SDK se choisit par la MÊME logique que l'application (Scripts/sdk_macos.sh),
+# pour que les trois Mach-O du bundle soient compilés contre le même. Le laisser
+# à l'environnement reproduirait exactement le défaut qu'on corrige : deux
+# variables pour une.
+MACOSX_DEPLOYMENT_TARGET="14.0"
+export MACOSX_DEPLOYMENT_TARGET
+
+source "$SCRIPT_DIR/sdk_macos.sh"
+choisir_sdk_macos || exit 1
+SDK_PATH="${SDKROOT:-$(xcrun --sdk macosx --show-sdk-path)}"
+export SDKROOT="$SDK_PATH"
+echo "▸ Cible de déploiement : macOS $MACOSX_DEPLOYMENT_TARGET"
+echo "▸ SDK employé          : $(plutil -extract Version raw "$SDK_PATH/SDKSettings.plist" 2>/dev/null || echo '?')"
+
 WORK="${1:-$PROJECT_ROOT/.ffmpeg-build}"
 mkdir -p "$WORK"
 WORK="$(cd "$WORK" && pwd)"
@@ -44,7 +65,7 @@ echo "▸ Dossier de travail : $WORK"
 # --- 1) Source amont ------------------------------------------------------
 cd "$WORK"
 if [[ ! -f "$TARBALL" ]]; then
-    echo "▸ Téléchargement de $TARBALL…"
+    echo "▸ Téléchargement de ${TARBALL}…"
     curl -fL -o "$TARBALL" "$UPSTREAM_URL"
 else
     echo "▸ Archive déjà présente — réutilisée."
@@ -130,6 +151,17 @@ echo
 echo "✓ Binaire prêt : $PWD/ffmpeg"
 echo "  taille  : $(stat -f%z ./ffmpeg) octets"
 echo "  SHA-256 : $(shasum -a 256 ./ffmpeg | cut -d' ' -f1)"
+
+# --- Garde : le binaire porte-t-il la cible demandée ? ----------------------
+# Un binaire marqué d'une version minimale plus élevée que celle annoncée au
+# téléchargement est un binaire qu'on ne sait pas si l'utilisateur peut lancer.
+MINOS_OBTENU="$(vtool -show-build ./ffmpeg 2>/dev/null | awk '$1=="minos"{print $2}')"
+if [[ "$MINOS_OBTENU" != "$MACOSX_DEPLOYMENT_TARGET" ]]; then
+    echo "✗ Binaire marqué « minos $MINOS_OBTENU », cible demandée $MACOSX_DEPLOYMENT_TARGET." >&2
+    echo "  La cible n'a pas été prise en compte — ne pas embarquer ce binaire." >&2
+    exit 1
+fi
+echo "  ✓ minos $MINOS_OBTENU · sdk $(vtool -show-build ./ffmpeg 2>/dev/null | awk '$1=="sdk"{print $2}')"
 echo
 echo "  Pour l'embarquer (geste manuel et délibéré) :"
 echo "    cp \"$PWD/ffmpeg\" \"$PROJECT_ROOT/Vendor/bin/ffmpeg\""

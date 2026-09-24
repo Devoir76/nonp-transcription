@@ -224,14 +224,41 @@ d'intégrité).
 
 ### Mettre à jour whisper.cpp (binaire)
 
+Un **script** s'en charge — ce n'est plus une procédure à recopier :
+
 ```bash
-git clone --depth 1 https://github.com/ggerganov/whisper.cpp.git
-cd whisper.cpp
+./Scripts/build_whisper.sh [dossier-de-travail]
+```
+
+> ⚠️ **Pourquoi un script, et non les commandes ci-dessous.** La procédure
+> précédente commençait par `git clone --depth 1`, ce qui récupère **HEAD** et
+> non le commit consigné. La suivre aujourd'hui compilerait une **autre source**
+> que celle qui est embarquée et annoncée. Mesuré le 24/09.
+>
+> Le script va chercher le commit `080bbbe85230f624f0b52127f1ae1218247989f9` par
+> son identifiant complet, **vérifie qu'il l'a bien obtenu**, vérifie que la
+> source déclare bien la version annoncée, fixe la **cible de déploiement
+> (macOS 14.0)** et le **SDK** — la cible manquait, et le binaire héritait alors
+> de la version de la machine —, puis contrôle le binaire produit : autonome, et
+> marqué de la cible demandée.
+
+Ce que le script exécute, pour mémoire :
+
+```bash
+# récupération du commit exact, pas de HEAD
+git -C <src> fetch --depth 1 origin 080bbbe85230f624f0b52127f1ae1218247989f9
+git -C <src> checkout FETCH_HEAD
+
 cmake -B build -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
       -DGGML_METAL=ON -DGGML_METAL_EMBED_LIBRARY=ON \
-      -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF
+      -DWHISPER_BUILD_TESTS=OFF -DWHISPER_BUILD_SERVER=OFF \
+      -DCMAKE_OSX_DEPLOYMENT_TARGET=14.0 -DCMAKE_OSX_SYSROOT=<SDK choisi>
 cmake --build build -j --config Release --target whisper-cli
-cp build/bin/whisper-cli "…/NONP-Transcription/Vendor/bin/whisper-cli"
+```
+
+L'installation dans `Vendor/bin/` reste un **geste manuel et délibéré**, comme
+pour FFmpeg — et elle impose de mettre à jour l'empreinte dans
+`THIRD_PARTY_NOTICES.md`.
 ```
 
 ### Mettre à jour FFmpeg (binaire + bibliothèques)

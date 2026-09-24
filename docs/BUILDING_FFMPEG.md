@@ -16,9 +16,11 @@ Contexte et justification de la stratégie de build :
 | Licence | **LGPL-2.1-or-later** (`ffmpeg -L` le confirme) |
 | Lien | **statique** — exécutable unique, pas de `lib/` |
 | External libraries | **`zlib` uniquement**, fournie par macOS (`/usr/lib/libz.1.dylib`) |
-| Cible | macOS 14+, **arm64** (Apple Silicon) |
-| Taille | 5 388 776 octets |
-| SHA-256 | `660f3b68ed5626495b87a51b632f58f3cddd0a4a32b44c9e519d25fdcf300155` |
+| Cible de déploiement | **macOS 14.0** — `MACOSX_DEPLOYMENT_TARGET`, fixée dans le script (voir ci-dessous) |
+| SDK de compilation | celui que choisit `Scripts/sdk_macos.sh`, le même que l'application |
+| Architecture | **arm64** (Apple Silicon) |
+| Taille | 5 438 328 octets |
+| SHA-256 | `00de24977c33329f3f9d9aad416fa4fe0fdda052f77e53c8ecc4b4d33d860675` |
 
 ## Source amont
 
@@ -48,6 +50,30 @@ dépôt : le binaire est laissé dans le dossier de travail.
 
 Prérequis : macOS arm64, les outils en ligne de commande Xcode (`clang`, `make`).
 Ni Homebrew, ni `pkg-config`, ni `nasm` ne sont nécessaires.
+
+## Cible de déploiement et SDK — fixés dans le script
+
+> ⚠️ **Mesuré le 24/09, et corrigé depuis.** Le binaire redistribué avec la
+> 1.2.3 déclarait **`minos 26.0`** dans son `LC_BUILD_VERSION` — la version de la
+> machine qui l'avait compilé — alors que l'application déclare `14.0` et que la
+> page de téléchargement promet « macOS 14 ou plus récent ». **Personne ne
+> l'avait décidé** : aucune cible n'était fixée, et le compilateur avait pris
+> celle du système.
+>
+> Le script fixe désormais les deux **dans son propre texte**, et non dans
+> l'environnement :
+>
+> - `MACOSX_DEPLOYMENT_TARGET=14.0` ;
+> - le SDK, choisi par la même logique que l'application (`Scripts/sdk_macos.sh`),
+>   pour que les trois Mach-O du bundle soient compilés contre le même.
+>
+> Il **s'arrête** si le binaire produit ne porte pas la cible demandée, et
+> `Scripts/build_app.sh` refuse d'assembler un bundle dont un Mach-O déclare
+> autre chose que le `LSMinimumSystemVersion` de l'`Info.plist`.
+>
+> *Cela ne garantit pas que le binaire FONCTIONNE sur macOS 14 — cela ne se
+> mesure que sur une machine de cette version. Cela garantit que le bundle dit
+> d'une seule voix ce qu'il exige.*
 
 ## Ligne `configure` exacte
 
