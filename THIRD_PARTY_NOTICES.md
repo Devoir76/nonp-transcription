@@ -222,5 +222,5 @@ otool -L "NONP Transcription.app/Contents/Resources/bin/whisper-cli"
 
 | Binaire | SHA-256 |
 |---|---|
-| `ffmpeg` (8.1.2, LGPL statique) | `660f3b68ed5626495b87a51b632f58f3cddd0a4a32b44c9e519d25fdcf300155` |
-| `whisper-cli` (1.9.1) | `9c950af9234d1b3f41557650b78a161963c03e77e0979e7b00d0f196a7aee2fe` |
+| `ffmpeg` (8.1.2, LGPL statique) | `00de24977c33329f3f9d9aad416fa4fe0fdda052f77e53c8ecc4b4d33d860675` |
+| `whisper-cli` (1.9.1) | `640ec6752d11199198fded72ea5919d2b40f1b04a69f9a13e8a0f455dccb2dcc` |
