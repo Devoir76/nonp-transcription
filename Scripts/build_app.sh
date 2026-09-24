@@ -178,6 +178,52 @@ verifier_marquage_bundle() {
     verifier_marquage_sdk "$bundle/Contents/MacOS/$exe"
 }
 
+# Garde de version minimale et de SDK — sur TOUS les Mach-O du bundle.
+#
+# Mesuré le 24/09 sur la 1.2.3 publiée : l'exécutable déclarait « minos 14.0 »,
+# les deux moteurs embarqués « minos 26.0 » — la version de la machine qui les
+# avait compilés. Personne ne l'avait décidé : aucune cible n'était fixée. La
+# page de téléchargement promet pourtant « macOS 14 ou plus récent ».
+#
+# Un binaire dont la version minimale dépasse celle du système se lance quand
+# même (mesuré), mais il peut appeler des API absentes — et alors il échoue au
+# lancement, chez l'utilisateur, pas ici. Ce que cette garde vérifie n'est donc
+# pas une promesse de fonctionnement : c'est que le bundle dit d'une seule voix
+# ce qu'il exige, et que cette voix est celle de l'Info.plist.
+verifier_version_minimale() {
+    local bundle="$1" f
+    local attendu sdk_attendu n=0 defauts=0
+    attendu=$(plutil -extract LSMinimumSystemVersion raw "$bundle/Contents/Info.plist" 2>/dev/null || true)
+    if [[ -z "$attendu" ]]; then
+        echo "✗ LSMinimumSystemVersion absent de l'Info.plist — rien à comparer." >&2
+        return 1
+    fi
+    # Le SDK de référence est celui de l'exécutable de l'application : c'est lui
+    # que la fabrication vient de produire, et les moteurs doivent le suivre.
+    local exe
+    exe=$(plutil -extract CFBundleExecutable raw "$bundle/Contents/Info.plist" 2>/dev/null || true)
+    sdk_attendu=$(vtool -show-build "$bundle/Contents/MacOS/$exe" 2>/dev/null | awk '$1=="sdk"{print $2}')
+
+    echo "▸ Garde de version minimale (attendu : minos $attendu · sdk $sdk_attendu)…"
+    while IFS= read -r f; do
+        file -b "$f" | grep -q 'Mach-O' || continue
+        n=$((n + 1))
+        local m s
+        m=$(vtool -show-build "$f" 2>/dev/null | awk '$1=="minos"{print $2}')
+        s=$(vtool -show-build "$f" 2>/dev/null | awk '$1=="sdk"{print $2}')
+        echo "    $(basename "$f") : minos $m · sdk $s"
+        [[ "$m" == "$attendu" && "$s" == "$sdk_attendu" ]] || defauts=$((defauts + 1))
+    done < <(find "$bundle" -type f)
+
+    if [[ "$defauts" -ne 0 ]]; then
+        echo "✗ $defauts Mach-O sur $n ne déclarent pas la même version minimale" >&2
+        echo "  ou le même SDK que l'application — build interrompue." >&2
+        echo "  Refabriquer les moteurs : Scripts/build_ffmpeg_lgpl.sh et Scripts/build_whisper.sh." >&2
+        return 1
+    fi
+    echo "  ✓ $n Mach-O déclarent tous minos $attendu et sdk $sdk_attendu"
+}
+
 # Signature : contrôlée APRÈS le strip, qui l'invalide et le dit lui-même.
 verifier_signature() {
     codesign --verify --deep --strict "$1" 2>/dev/null || {
@@ -204,6 +250,7 @@ if [[ -n "$VERIFY_ONLY" ]]; then
     verifier_chemins_bundle "$VERIFY_ONLY"               || echec=1
     echo "▸ Garde de marquage SDK…"
     verifier_marquage_bundle "$VERIFY_ONLY"              || echec=1
+    verifier_version_minimale "$VERIFY_ONLY"             || echec=1
     echo "▸ Garde de langue…"
     verifier_langue_francaise "$VERIFY_ONLY/Contents/Info.plist" || echec=1
     echo "▸ Garde de signature…"
@@ -374,6 +421,7 @@ strip -S "$BIN_APP"
 verifier_chemins_bundle "$APP_BUNDLE" || exit 1
 echo "▸ Garde de marquage SDK…"
 verifier_marquage_bundle "$APP_BUNDLE" || exit 1
+verifier_version_minimale "$APP_BUNDLE" || exit 1
 
 # --- 3) Signature ad-hoc --------------------------------------------------
 # Signature locale « ad-hoc » : suffisante pour un usage personnel quotidien,
